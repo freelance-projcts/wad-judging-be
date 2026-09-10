@@ -1,0 +1,489 @@
+openapi: 3.0.3
+info:
+  title: WAD Judging System API
+  version: "1.0.0"
+  description: >
+    REST API for the WAD Judging System - a role-based platform for managing
+    students, events, teams, judges, marks entry, edit-request approvals and
+    results for a judged performance competition.
+servers:
+  - url: /api
+tags:
+  - name: Auth
+  - name: Students
+  - name: Events
+  - name: Team
+  - name: Judges
+  - name: Performances
+  - name: Marks
+  - name: Edit Requests
+  - name: Notifications
+  - name: Results
+  - name: Profile
+  - name: Upload
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: wad_session
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+    User:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        email: { type: string, format: email }
+        role: { type: string, enum: [ADMIN, JUDGE] }
+        avatarUrl: { type: string, nullable: true }
+    Student:
+      type: object
+      properties:
+        id: { type: string }
+        code: { type: string }
+        fullName: { type: string }
+        gender: { type: string, enum: [MALE, FEMALE, OTHER] }
+        province:
+          type: string
+          enum: [WESTERN, CENTRAL, SOUTHERN, NORTHERN, EASTERN, NORTH_WESTERN, NORTH_CENTRAL, UVA, SABARAGAMUWA]
+        team: { type: string, enum: [A, B], nullable: true }
+        photoUrl: { type: string, nullable: true }
+    Event:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        gender: { type: string, enum: [MALE, FEMALE, OTHER] }
+    Performance:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        order: { type: integer }
+    MarkEntry:
+      type: object
+      properties:
+        id: { type: string }
+        studentId: { type: string }
+        eventId: { type: string }
+        performanceId: { type: string }
+        round: { type: integer }
+        dScore: { type: string }
+        e1Score: { type: string }
+        e2Score: { type: string }
+        e3Score: { type: string }
+        e4Score: { type: string }
+        penaltyScore: { type: string }
+        finalScore: { type: string }
+    EditRequest:
+      type: object
+      properties:
+        id: { type: string }
+        markEntryId: { type: string }
+        requesterId: { type: string }
+        status: { type: string, enum: [PENDING, APPROVED, REJECTED] }
+        reason: { type: string, nullable: true }
+
+security:
+  - cookieAuth: []
+
+paths:
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Self-register a new judge account
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password]
+              properties:
+                name: { type: string }
+                email: { type: string, format: email }
+                password: { type: string, minLength: 8 }
+      responses:
+        "200":
+          description: Account created, session cookie set
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user: { $ref: "#/components/schemas/User" }
+        "409":
+          description: Email already registered
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Sign in with email and password
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+      responses:
+        "200":
+          description: Signed in, session cookie set
+        "401":
+          description: Invalid credentials
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Clear the current session
+      responses:
+        "200":
+          description: Logged out
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Get the current session's user and (for judges) assigned performances
+      responses:
+        "200":
+          description: Current user (or null if not authenticated)
+
+  /students:
+    get:
+      tags: [Students]
+      summary: List/search students
+      parameters:
+        - in: query
+          name: q
+          schema: { type: string }
+          description: Search by name or ID code
+        - in: query
+          name: gender
+          schema: { type: string, enum: [MALE, FEMALE, OTHER] }
+        - in: query
+          name: province
+          schema: { type: string }
+        - in: query
+          name: team
+          schema: { type: string, enum: [A, B] }
+      responses:
+        "200":
+          description: List of students
+    post:
+      tags: [Students]
+      summary: Create a student (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Student" }
+      responses:
+        "201":
+          description: Student created
+        "403":
+          description: Admin access required
+
+  /students/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string }
+    get:
+      tags: [Students]
+      summary: Get a student by id
+      responses:
+        "200": { description: OK }
+        "404": { description: Not found }
+    patch:
+      tags: [Students]
+      summary: Update a student (admin only)
+      responses:
+        "200": { description: Updated }
+    delete:
+      tags: [Students]
+      summary: Delete a student (admin only, blocked if marks exist)
+      responses:
+        "200": { description: Deleted }
+        "409": { description: Student has recorded marks }
+
+  /events:
+    get:
+      tags: [Events]
+      summary: List events, optionally filtered by gender
+      responses:
+        "200": { description: OK }
+    post:
+      tags: [Events]
+      summary: Create an event (admin only)
+      responses:
+        "201": { description: Created }
+
+  /events/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string }
+    patch:
+      tags: [Events]
+      summary: Update an event (admin only)
+      responses:
+        "200": { description: Updated }
+    delete:
+      tags: [Events]
+      summary: Delete an event (admin only, blocked if marks exist)
+      responses:
+        "200": { description: Deleted }
+
+  /team:
+    patch:
+      tags: [Team]
+      summary: Assign a student to Team A or Team B (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [studentId, team]
+              properties:
+                studentId: { type: string }
+                team: { type: string, enum: [A, B] }
+      responses:
+        "200": { description: Updated }
+
+  /judges:
+    get:
+      tags: [Judges]
+      summary: List judges with their performance assignments (admin only)
+      responses:
+        "200": { description: OK }
+
+  /judges/{id}/performances:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string }
+    post:
+      tags: [Judges]
+      summary: Grant a judge access to a performance (admin only)
+      responses:
+        "201": { description: Granted }
+    delete:
+      tags: [Judges]
+      summary: Revoke a judge's access to a performance (admin only)
+      parameters:
+        - in: query
+          name: performanceId
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Revoked }
+
+  /performances:
+    get:
+      tags: [Performances]
+      summary: List performances
+      responses:
+        "200": { description: OK }
+
+  /marks:
+    get:
+      tags: [Marks]
+      summary: List mark entries for a performance (judge must be assigned; admin unrestricted)
+      parameters:
+        - in: query
+          name: performanceId
+          required: true
+          schema: { type: string }
+        - in: query
+          name: eventId
+          schema: { type: string }
+        - in: query
+          name: studentId
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+        "403": { description: Not assigned to this performance }
+    post:
+      tags: [Marks]
+      summary: Create or update marks (one or more rounds) for a student/event/performance
+      description: >
+        Creating a brand-new round is always allowed for an assigned judge.
+        Editing an existing round requires the judge to hold an APPROVED,
+        unconsumed edit request for that mark entry (or be an admin).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [studentId, eventId, performanceId, rounds]
+              properties:
+                studentId: { type: string }
+                eventId: { type: string }
+                performanceId: { type: string }
+                rounds:
+                  type: array
+                  items:
+                    type: object
+                    required: [round, d, e1, e2, e3, e4]
+                    properties:
+                      round: { type: integer }
+                      d: { type: number }
+                      dSupervisor: { type: string, nullable: true }
+                      e1: { type: number }
+                      e2: { type: number }
+                      e3: { type: number }
+                      e4: { type: number }
+                      p: { type: number, default: 0 }
+      responses:
+        "201": { description: Marks saved }
+        "403": { description: Editing requires an approved edit request }
+
+  /marks/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string }
+    get:
+      tags: [Marks]
+      summary: Get a single mark entry
+      responses:
+        "200": { description: OK }
+
+  /edit-requests:
+    get:
+      tags: [Edit Requests]
+      summary: List edit requests (admin sees all, judge sees own)
+      responses:
+        "200": { description: OK }
+    post:
+      tags: [Edit Requests]
+      summary: A judge requests permission to edit an already-submitted mark entry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [markEntryId]
+              properties:
+                markEntryId: { type: string }
+                reason: { type: string, nullable: true }
+      responses:
+        "201": { description: Request created }
+
+  /edit-requests/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string }
+    patch:
+      tags: [Edit Requests]
+      summary: Approve or reject a pending edit request (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [APPROVED, REJECTED] }
+      responses:
+        "200": { description: Resolved }
+
+  /notifications:
+    get:
+      tags: [Notifications]
+      summary: Recent mark-entry activity across all performances (admin only)
+      responses:
+        "200": { description: OK }
+
+  /results:
+    get:
+      tags: [Results]
+      summary: Aggregated results (team totals, top 8, all-rounders) for a performance
+      parameters:
+        - in: query
+          name: performanceId
+          required: true
+          schema: { type: string }
+        - in: query
+          name: view
+          schema: { type: string, enum: [team, top8, all-rounders] }
+        - in: query
+          name: eventId
+          schema: { type: string }
+        - in: query
+          name: gender
+          schema: { type: string, enum: [MALE, FEMALE, OTHER] }
+      responses:
+        "200": { description: OK }
+
+  /results/download:
+    get:
+      tags: [Results]
+      summary: Download results as CSV for a performance/gender (optionally one event)
+      parameters:
+        - in: query
+          name: performanceId
+          required: true
+          schema: { type: string }
+        - in: query
+          name: gender
+          required: true
+          schema: { type: string, enum: [MALE, FEMALE, OTHER] }
+        - in: query
+          name: eventId
+          schema: { type: string }
+      responses:
+        "200":
+          description: CSV file
+          content:
+            text/csv:
+              schema: { type: string }
+
+  /profile:
+    patch:
+      tags: [Profile]
+      summary: Update the current user's name and/or avatar
+      responses:
+        "200": { description: Updated }
+
+  /upload:
+    post:
+      tags: [Upload]
+      summary: Upload an image (student photo or avatar) via multipart/form-data
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: Uploaded file URL

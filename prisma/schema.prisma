@@ -1,0 +1,173 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  JUDGE
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum Province {
+  WESTERN
+  CENTRAL
+  SOUTHERN
+  NORTHERN
+  EASTERN
+  NORTH_WESTERN
+  NORTH_CENTRAL
+  UVA
+  SABARAGAMUWA
+}
+
+enum Team {
+  A
+  B
+}
+
+enum EditRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         Role
+  avatarUrl    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  judgeAssignments JudgeAssignment[]
+  markEntries      MarkEntry[]       @relation("MarkEntryJudge")
+  editRequestsMade EditRequest[]     @relation("EditRequestRequester")
+  editRequestsHandled EditRequest[]  @relation("EditRequestResolver")
+
+  @@map("users")
+}
+
+model Performance {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  judgeAssignments JudgeAssignment[]
+  markEntries      MarkEntry[]
+
+  @@map("performances")
+}
+
+model JudgeAssignment {
+  id            String      @id @default(cuid())
+  judgeId       String
+  performanceId String
+  createdAt     DateTime    @default(now())
+
+  judge       User        @relation(fields: [judgeId], references: [id], onDelete: Cascade)
+  performance Performance @relation(fields: [performanceId], references: [id], onDelete: Cascade)
+
+  @@unique([judgeId, performanceId])
+  @@map("judge_assignments")
+}
+
+model Event {
+  id        String   @id @default(cuid())
+  name      String
+  gender    Gender
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  markEntries MarkEntry[]
+
+  @@unique([name, gender])
+  @@map("events")
+}
+
+model Student {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  fullName  String
+  gender    Gender
+  province  Province
+  photoUrl  String?
+  team      Team?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  markEntries MarkEntry[]
+
+  @@index([province])
+  @@index([gender])
+  @@index([team])
+  @@map("students")
+}
+
+model MarkEntry {
+  id            String   @id @default(cuid())
+  studentId     String
+  eventId       String
+  performanceId String
+  round         Int      @default(1)
+  judgeId       String
+
+  dScore           Decimal @db.Decimal(5, 2)
+  dSupervisor      String?
+  e1Score          Decimal @db.Decimal(5, 2)
+  e1Supervisor     String?
+  e2Score          Decimal @db.Decimal(5, 2)
+  e2Supervisor     String?
+  e3Score          Decimal @db.Decimal(5, 2)
+  e3Supervisor     String?
+  e4Score          Decimal @db.Decimal(5, 2)
+  e4Supervisor     String?
+  penaltyScore     Decimal @db.Decimal(5, 2) @default(0)
+  penaltySupervisor String?
+  finalScore       Decimal @db.Decimal(6, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  student     Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  event       Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  performance Performance @relation(fields: [performanceId], references: [id], onDelete: Cascade)
+  judge       User        @relation("MarkEntryJudge", fields: [judgeId], references: [id])
+
+  editRequests EditRequest[]
+
+  @@unique([studentId, eventId, performanceId, round])
+  @@index([performanceId])
+  @@index([eventId])
+  @@map("mark_entries")
+}
+
+model EditRequest {
+  id           String             @id @default(cuid())
+  markEntryId  String
+  requesterId  String
+  reason       String?
+  status       EditRequestStatus  @default(PENDING)
+  resolvedById String?
+  resolvedAt   DateTime?
+  createdAt    DateTime           @default(now())
+
+  markEntry  MarkEntry @relation(fields: [markEntryId], references: [id], onDelete: Cascade)
+  requester  User      @relation("EditRequestRequester", fields: [requesterId], references: [id])
+  resolver   User?     @relation("EditRequestResolver", fields: [resolvedById], references: [id])
+
+  @@index([status])
+  @@map("edit_requests")
+}
