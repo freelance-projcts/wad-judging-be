@@ -1,0 +1,42 @@
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: wad_user
+      POSTGRES_PASSWORD: wad_password
+      POSTGRES_DB: wad_judging
+    ports:
+      - "5432:5432"
+    volumes:
+      - wad_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wad_user -d wad_judging"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://wad_user:wad_password@db:5432/wad_judging?schema=public
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
+      JWT_EXPIRES_IN: 7d
+      STORAGE_DRIVER: local
+      LOCAL_UPLOAD_DIR: public/uploads
+      LOCAL_UPLOAD_PUBLIC_PATH: /uploads
+      NODE_ENV: production
+    ports:
+      - "3000:3000"
+    volumes:
+      - wad_uploads:/app/public/uploads
+
+volumes:
+  wad_pgdata:
+  wad_uploads:
