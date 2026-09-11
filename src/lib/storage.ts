@@ -23,10 +23,13 @@ class LocalStorageDriver implements StorageDriver {
   }
 
   async save(buffer: Buffer, originalName: string, _contentType: string): Promise<string> {
-    const dir = path.join(process.cwd(), this.uploadDir);
+    // turbopackIgnore: this driver only runs where a persistent filesystem exists
+    // (local dev, Docker). Skipping static tracing here keeps serverless builds
+    // (Netlify) from bundling the entire project into the function output.
+    const dir = path.join(/* turbopackIgnore: true */ process.cwd(), this.uploadDir);
     await fs.mkdir(dir, { recursive: true });
     const filename = `${randomUUID()}${safeExtension(originalName)}`;
-    await fs.writeFile(path.join(dir, filename), buffer);
+    await fs.writeFile(path.join(/* turbopackIgnore: true */ dir, filename), buffer);
     return `${this.publicPath}/${filename}`;
   }
 }

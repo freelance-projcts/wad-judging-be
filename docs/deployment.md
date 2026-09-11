@@ -235,8 +235,15 @@ Site settings → **Environment variables** → add:
 | `JWT_SECRET` | a real random value: `openssl rand -hex 48` |
 | `JWT_EXPIRES_IN` | `7d` |
 | `STORAGE_DRIVER` | `local` (default — omit this var entirely, or set it explicitly; see Step 4 caveat about uploads not working until S3 is added) |
-| `NODE_ENV` | `production` |
 | `NEXT_PUBLIC_APP_URL` | leave blank for now — Netlify assigns a URL on first deploy; come back and set this to that URL (e.g. `https://your-site-name.netlify.app`), then redeploy |
+
+**Do not set `NODE_ENV` here.** Netlify runs `npm install` before the build
+using whatever's in this environment variable list, and npm's own default
+behavior is to skip installing `devDependencies` entirely when `NODE_ENV` is
+`production` at install time — which breaks the build the moment it needs a
+build-only devDependency like `@tailwindcss/postcss`. Next.js already sets
+`NODE_ENV=production` internally for the compiled output and the running
+server; you never need to set it yourself on Netlify.
 
 `S3_*` variables are not needed yet — add them (and flip `STORAGE_DRIVER` to
 `s3`) once you complete Step 4.
