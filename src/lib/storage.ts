@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import path from "path";
 import fs from "fs/promises";
+import { ApiError } from "./api-auth";
 
 export interface StorageDriver {
   save(buffer: Buffer, originalName: string, contentType: string): Promise<string>;
@@ -83,9 +84,9 @@ const ALLOWED_CONTENT_TYPES = new Set(["image/png", "image/jpeg", "image/webp", 
 
 export function assertValidImageUpload(contentType: string, size: number) {
   if (!ALLOWED_CONTENT_TYPES.has(contentType)) {
-    throw new Error("Unsupported file type. Allowed: PNG, JPEG, WEBP, GIF.");
+    throw new ApiError(400, "Unsupported file type. Allowed: PNG, JPEG, WEBP, GIF.");
   }
   if (size > MAX_UPLOAD_BYTES) {
-    throw new Error("File too large. Maximum size is 5MB.");
+    throw new ApiError(400, "File too large. Maximum size is 5MB.");
   }
 }

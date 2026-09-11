@@ -1,6 +1,6 @@
 import { SignJWT, jwtVerify } from "jose";
 import bcrypt from "bcryptjs";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { NextRequest } from "next/server";
 import type { Role } from "@prisma/client";
 
@@ -52,17 +52,35 @@ export async function verifySession(token: string): Promise<SessionPayload | nul
 
 export const SESSION_COOKIE_NAME = SESSION_COOKIE;
 
-/** Read + verify the session from the Next.js `cookies()` API (Server Components / Route Handlers). */
+/**
+ * Read + verify the session from the Next.js `cookies()` API (Server Components /
+ * Route Handlers). Falls back to an `Authorization: Bearer <token>` header so
+ * non-browser clients (Postman, mobile, curl) can authenticate with the token
+ * returned from /api/auth/login or /api/auth/register instead of a cookie.
+ */
 export async function getSession(): Promise<SessionPayload | null> {
   const store = await cookies();
-  const token = store.get(SESSION_COOKIE)?.value;
+  let token = store.get(SESSION_COOKIE)?.value;
+  if (!token) {
+    const hdrs = await headers();
+    const authHeader = hdrs.get("authorization");
+    if (authHeader?.startsWith("Bearer ")) {
+      token = authHeader.slice("Bearer ".length);
+    }
+  }
   if (!token) return null;
   return verifySession(token);
 }
 
-/** Read + verify the session from a NextRequest (middleware). */
+/** Read + verify the session from a NextRequest (middleware). Also accepts a Bearer token. */
 export async function getSessionFromRequest(req: NextRequest): Promise<SessionPayload | null> {
-  const token = req.cookies.get(SESSION_COOKIE)?.value;
+  let token = req.cookies.get(SESSION_COOKIE)?.value;
+  if (!token) {
+    const authHeader = req.headers.get("authorization");
+    if (authHeader?.startsWith("Bearer ")) {
+      token = authHeader.slice("Bearer ".length);
+    }
+  }
   if (!token) return null;
   return verifySession(token);
 }

@@ -9,6 +9,7 @@ export interface SessionUser {
   email: string;
   role: "ADMIN" | "JUDGE";
   avatarUrl?: string | null;
+  mobileNumber?: string | null;
 }
 
 export interface SessionPerformance {

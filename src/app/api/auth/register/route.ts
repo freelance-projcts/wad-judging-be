@@ -28,6 +28,7 @@ export async function POST(req: NextRequest) {
         name: data.name,
         email: data.email,
         passwordHash,
+        mobileNumber: data.mobileNumber || undefined,
         role: "JUDGE",
       },
     });
@@ -40,7 +41,14 @@ export async function POST(req: NextRequest) {
     });
 
     const res = NextResponse.json({
-      user: { id: user.id, name: user.name, email: user.email, role: user.role },
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        mobileNumber: user.mobileNumber,
+      },
+      token,
     });
     res.cookies.set({ ...sessionCookieOptions(SEVEN_DAYS), value: token });
     return res;

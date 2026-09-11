@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Mail, Lock, User as UserIcon, Sparkles } from "lucide-react";
+import { Mail, Lock, User as UserIcon, Sparkles, Phone } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -70,6 +70,23 @@ export default function RegisterPage() {
               <Input id="email" type="email" placeholder="you@example.com" className="pl-9" {...register("email")} />
             </div>
             {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="mobileNumber">Mobile Number</Label>
+            <div className="relative">
+              <Phone className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+              <Input
+                id="mobileNumber"
+                type="tel"
+                placeholder="07XXXXXXXX"
+                className="pl-9"
+                {...register("mobileNumber")}
+              />
+            </div>
+            {errors.mobileNumber && (
+              <p className="text-xs text-destructive">{errors.mobileNumber.message}</p>
+            )}
           </div>
 
           <div className="space-y-1.5">

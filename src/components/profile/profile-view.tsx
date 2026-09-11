@@ -38,7 +38,10 @@ export function ProfileView() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [editingName, setEditingName] = useState(false);
   const [name, setName] = useState(user?.name ?? "");
+  const [editingMobile, setEditingMobile] = useState(false);
+  const [mobileNumber, setMobileNumber] = useState(user?.mobileNumber ?? "");
   const [saving, setSaving] = useState(false);
+  const [savingMobile, setSavingMobile] = useState(false);
 
   if (!user) return null;
 
@@ -69,6 +72,20 @@ export function ProfileView() {
       toast.error(err instanceof ApiClientError ? err.message : "Failed to update name");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function saveMobileNumber() {
+    setSavingMobile(true);
+    try {
+      await api.patch("/api/profile", { mobileNumber });
+      await refresh();
+      setEditingMobile(false);
+      toast.success("Mobile number updated");
+    } catch (err) {
+      toast.error(err instanceof ApiClientError ? err.message : "Failed to update mobile number");
+    } finally {
+      setSavingMobile(false);
     }
   }
 
@@ -124,6 +141,30 @@ export function ProfileView() {
           <div className="space-y-1 border-b pb-4">
             <p className="text-sm text-muted-foreground">Email</p>
             <p className="font-medium">{user.email}</p>
+          </div>
+
+          <div className="space-y-1 border-b pb-4">
+            <p className="text-sm text-muted-foreground">Mobile Number</p>
+            {editingMobile ? (
+              <div className="flex gap-2">
+                <Input
+                  type="tel"
+                  value={mobileNumber ?? ""}
+                  onChange={(e) => setMobileNumber(e.target.value)}
+                  placeholder="07XXXXXXXX"
+                />
+                <Button size="sm" onClick={saveMobileNumber} disabled={savingMobile}>
+                  Save
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between">
+                <p className="font-medium">{user.mobileNumber || "Not set"}</p>
+                <button onClick={() => setEditingMobile(true)}>
+                  <Pencil className="size-4 text-muted-foreground" />
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="space-y-1">

@@ -19,9 +19,6 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ url });
   } catch (err) {
-    if (err instanceof Error && !(err instanceof ApiError)) {
-      return NextResponse.json({ error: err.message }, { status: 400 });
-    }
     return apiErrorResponse(err);
   }
 }

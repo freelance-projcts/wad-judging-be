@@ -35,6 +35,11 @@ export const registerSchema = z.object({
   name: z.string().trim().min(2, "Name must be at least 2 characters").max(100),
   email: z.string().trim().email("Enter a valid email"),
   password: z.string().min(8, "Password must be at least 8 characters").max(100),
+  mobileNumber: z
+    .string()
+    .trim()
+    .optional()
+    .refine((v) => !v || /^[0-9+\-\s]{7,15}$/.test(v), { message: "Enter a valid mobile number" }),
 });
 
 export const loginSchema = z.object({
@@ -99,4 +104,12 @@ export const editRequestResolveSchema = z.object({
 export const profileUpdateSchema = z.object({
   name: z.string().trim().min(2).max(100).optional(),
   avatarUrl: z.string().optional().nullable(),
+  mobileNumber: z
+    .string()
+    .trim()
+    .regex(/^[0-9+\-\s]{7,15}$/, "Enter a valid mobile number")
+    .optional()
+    .nullable()
+    .or(z.literal(""))
+    .transform((v) => (v ? v : null)),
 });
