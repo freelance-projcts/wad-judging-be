@@ -76,11 +76,11 @@ production database, and a fresh Netlify site.
 
 ### Step 2 — Create the production database
 
-Pick **one** of these. Either way, you end up needing **two** connection
-strings for the same database: a **pooled** one (for the running app) and a
-**direct/unpooled** one (for running migrations) — Neon's pooler doesn't
-support the schema-locking operations Prisma Migrate needs, so migrations
-must bypass it. `prisma/schema.prisma` already has both wired up:
+You end up needing **two** connection strings for the same database: a
+**pooled** one (for the running app) and a **direct/unpooled** one (for
+running migrations) — Neon's pooler doesn't support the schema-locking
+operations Prisma Migrate needs, so migrations must bypass it.
+`prisma/schema.prisma` already has both wired up:
 
 ```prisma
 datasource db {
@@ -90,30 +90,20 @@ datasource db {
 }
 ```
 
-**Option A — Netlify DB (simplest, stays inside the Netlify dashboard)**
+**We deliberately don't use Netlify's own `@netlify/database` package /
+`netlify database init` flow.** That native integration provisions Postgres
+too, but its automatic per-branch provisioning and auto-migration-on-deploy
+feature only understands raw SQL files under `netlify/database/migrations/`
+or Drizzle ORM — it has no Prisma support. Since this project's entire
+schema history lives in `prisma/migrations/` and is applied via Prisma
+Migrate, adopting that package would mean either running two disconnected
+migration systems, or preview/branch databases silently drifting out of
+schema sync (since Netlify's auto-migrator would never invoke
+`prisma migrate deploy`). Plain Neon avoids all of that — same underlying
+Postgres, no Netlify-specific package, full control over both connection
+strings.
 
-Netlify's built-in "Netlify DB" (powered by Neon) provisions a Postgres
-database in the background and wires `DATABASE_URL` into your site's
-environment automatically — no separate Neon signup needed to get started.
-
-1. In your Netlify site → **Extensions** → find **Neon** ("Netlify DB") →
-   install/enable it, or run `netlify db init` via the Netlify CLI from the
-   project directory.
-2. This provisions an **anonymous** Neon database under the hood and sets
-   `DATABASE_URL` in your site's environment variables for you — that
-   matches what `prisma/schema.prisma` expects, no renaming needed.
-3. **Claim the database** — an anonymous Netlify DB is meant to be
-   temporary/trial. Click **"Connect Neon"** (shown in the Netlify DB panel
-   on your site, or in the CLI output) to link it to a real Neon account you
-   control. This is what makes it a permanent production database and gives
-   you a normal Neon console to view/manage it in (see "Finding and viewing
-   the database" below).
-4. Once claimed, get the **direct/unpooled** connection string too (see
-   Option B, step 4) from the now-linked Neon project, and add it as
-   `DIRECT_URL` in Netlify's environment variables — Netlify DB only sets
-   the pooled `DATABASE_URL` for you automatically.
-
-**Option B — Standalone Neon account (more control, works with any host)**
+**Create a standalone Neon project:**
 
 1. Sign up at [neon.tech](https://neon.tech) (GitHub login works).
 2. **Create a project** → pick a region close to your users → Postgres
@@ -142,8 +132,7 @@ as `DATABASE_URL`, and the direct connection on port `5432` as `DIRECT_URL`.)
 
 ### Finding and viewing the database
 
-Once claimed (Option A) or created directly (Option B), the database is a
-normal Neon project — manage/inspect it at
+Manage/inspect the Neon project at
 [console.neon.tech](https://console.neon.tech):
 
 - **Tables/data**: Project → **Tables** in the left nav gives a
@@ -154,9 +143,6 @@ normal Neon project — manage/inspect it at
 - **From a desktop client** (DataGrip, TablePlus, etc.): use the direct
   connection's host/port/user/password/database — same as connecting to any
   Postgres server, just remote instead of `localhost`.
-- Netlify's own site dashboard also has a **Database**/**Neon** panel
-  (under Extensions once installed) with a shortcut link into that same
-  Neon project.
 
 ### Step 3 — Run migrations against the production database
 
@@ -230,7 +216,7 @@ Site settings → **Environment variables** → add:
 
 | Variable | Value |
 |---|---|
-| `DATABASE_URL` | the **pooled** connection string from Step 2 (Netlify DB sets this for you automatically if you used Option A) |
+| `DATABASE_URL` | the **pooled** connection string from Step 2 |
 | `DIRECT_URL` | the **direct/unpooled** connection string from Step 2. Not read by the running app at all — only relevant if you later add a CI step that runs `prisma migrate deploy` from within Netlify's build. Safe to add now for reference, or skip and just pass it inline (Step 3) whenever you run migrations from your own machine |
 | `JWT_SECRET` | a real random value: `openssl rand -hex 48` |
 | `JWT_EXPIRES_IN` | `7d` |
