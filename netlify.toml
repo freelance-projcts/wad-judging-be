@@ -2,5 +2,14 @@
   command = "npm run build"
   publish = ".next"
 
+[build.environment]
+  # Force npm to install devDependencies (tailwindcss, @tailwindcss/postcss,
+  # typescript, etc.) even if NODE_ENV=production is set anywhere in the
+  # build environment - npm's own default is to skip devDependencies when
+  # NODE_ENV is "production", which breaks this build (it needs those
+  # packages to compile, not just to run). Next.js sets the real runtime
+  # NODE_ENV itself; nothing here should ever need to override that.
+  NPM_CONFIG_PRODUCTION = "false"
+
 [[plugins]]
   package = "@netlify/plugin-nextjs"
