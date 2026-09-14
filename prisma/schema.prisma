@@ -42,6 +42,11 @@ enum EditRequestStatus {
   REJECTED
 }
 
+enum NotificationType {
+  MARK_ENTRY
+  EDIT_REQUEST
+}
+
 model User {
   id           String   @id @default(cuid())
   name         String
@@ -57,8 +62,23 @@ model User {
   markEntries      MarkEntry[]       @relation("MarkEntryJudge")
   editRequestsMade EditRequest[]     @relation("EditRequestRequester")
   editRequestsHandled EditRequest[]  @relation("EditRequestResolver")
+  notifications    Notification[]
 
   @@map("users")
+}
+
+model Notification {
+  id          String           @id @default(cuid())
+  recipientId String
+  type        NotificationType
+  message     String
+  isRead      Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+
+  recipient User @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@index([recipientId, isRead])
+  @@map("notifications")
 }
 
 model Performance {

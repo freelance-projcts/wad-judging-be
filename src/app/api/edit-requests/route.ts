@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSession, requireJudge, apiErrorResponse, parseBody, ApiError } from "@/lib/api-auth";
 import { editRequestCreateSchema } from "@/lib/validators";
+import { notifyAdmins } from "@/lib/notifications";
 
 /** Admins see every request; judges see only the ones they made. */
 export async function GET() {
@@ -32,7 +33,10 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const data = parseBody(editRequestCreateSchema, body);
 
-    const markEntry = await prisma.markEntry.findUnique({ where: { id: data.markEntryId } });
+    const markEntry = await prisma.markEntry.findUnique({
+      where: { id: data.markEntryId },
+      include: { student: { select: { fullName: true } }, event: { select: { name: true } } },
+    });
     if (!markEntry) throw new ApiError(404, "Mark entry not found");
 
     const assignment = await prisma.judgeAssignment.findUnique({
@@ -54,6 +58,11 @@ export async function POST(req: NextRequest) {
         reason: data.reason ?? null,
       },
     });
+
+    await notifyAdmins(
+      "EDIT_REQUEST",
+      `${session.name} requested to edit marks for ${markEntry.student.fullName} - ${markEntry.event.name}`
+    );
 
     return NextResponse.json({ request }, { status: 201 });
   } catch (err) {

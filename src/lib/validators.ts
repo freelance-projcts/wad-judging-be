@@ -31,6 +31,24 @@ export const genderLabels: Record<string, string> = {
   OTHER: "Other",
 };
 
+/**
+ * Normalize a query-string enum filter (e.g. "Male", "north western") against
+ * a list of allowed values (e.g. genders/provinces, which are stored upper-cased).
+ * Returns { value: undefined, invalid: false } when the param wasn't given at
+ * all, and { value: undefined, invalid: true } when it was given but doesn't
+ * match anything - callers should treat that as "no results" rather than
+ * passing the raw string straight into a Prisma enum filter, which throws.
+ */
+export function normalizeEnumParam<T extends string>(
+  value: string | null,
+  allowed: readonly T[]
+): { value: T | undefined; invalid: boolean } {
+  if (!value) return { value: undefined, invalid: false };
+  const normalized = value.trim().toUpperCase().replace(/[\s-]+/g, "_");
+  const match = allowed.find((a) => a === normalized);
+  return match ? { value: match, invalid: false } : { value: undefined, invalid: true };
+}
+
 export const registerSchema = z.object({
   name: z.string().trim().min(2, "Name must be at least 2 characters").max(100),
   email: z.string().trim().email("Enter a valid email"),
@@ -47,26 +65,22 @@ export const loginSchema = z.object({
   password: z.string().min(1, "Password is required"),
 });
 
+export const teams = ["A", "B"] as const;
+
 export const studentSchema = z.object({
   code: z.string().trim().min(1, "ID is required").max(20),
   fullName: z.string().trim().min(2, "Full name is required").max(150),
   gender: z.enum(genders),
   province: z.enum(provinces),
   photoUrl: z.string().optional().nullable(),
+  team: z.enum(teams).optional().nullable(),
 });
 
-export const studentUpdateSchema = studentSchema.partial().extend({
-  team: z.enum(["A", "B"]).optional().nullable(),
-});
+export const studentUpdateSchema = studentSchema.partial();
 
 export const eventSchema = z.object({
   name: z.string().trim().min(1, "Event name is required").max(100),
   gender: z.enum(genders),
-});
-
-export const teamAssignSchema = z.object({
-  studentId: z.string().min(1),
-  team: z.enum(["A", "B"]),
 });
 
 export const roundScoresSchema = z.object({
@@ -100,6 +114,17 @@ export const editRequestCreateSchema = z.object({
 export const editRequestResolveSchema = z.object({
   status: z.enum(["APPROVED", "REJECTED"]),
 });
+
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, "Current password is required"),
+    newPassword: z.string().min(8, "Password must be at least 8 characters").max(100),
+    confirmPassword: z.string().min(1, "Please confirm the new password"),
+  })
+  .refine((data) => data.newPassword === data.confirmPassword, {
+    message: "Passwords do not match",
+    path: ["confirmPassword"],
+  });
 
 export const profileUpdateSchema = z.object({
   name: z.string().trim().min(2).max(100).optional(),

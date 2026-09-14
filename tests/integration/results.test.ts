@@ -47,9 +47,9 @@ describe("results aggregation", () => {
         fullName: s.fullName,
         gender: "FEMALE",
         province: "CENTRAL",
+        team: s.team,
       });
       const student = (await studentRes.json()).student;
-      await admin.patch("/api/team", { studentId: student.id, team: s.team });
       await judge.post("/api/marks", {
         studentId: student.id,
         eventId,

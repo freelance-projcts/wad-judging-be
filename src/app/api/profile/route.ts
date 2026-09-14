@@ -1,7 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireSession, apiErrorResponse, parseBody } from "@/lib/api-auth";
+import { requireSession, apiErrorResponse, parseBody, ApiError } from "@/lib/api-auth";
 import { profileUpdateSchema } from "@/lib/validators";
+import { getProfileWithPerformances } from "@/lib/profile";
+
+export async function GET() {
+  try {
+    const session = await requireSession();
+    const profile = await getProfileWithPerformances(session.sub);
+    if (!profile) throw new ApiError(404, "User not found");
+    return NextResponse.json(profile);
+  } catch (err) {
+    return apiErrorResponse(err);
+  }
+}
 
 export async function PATCH(req: NextRequest) {
   try {

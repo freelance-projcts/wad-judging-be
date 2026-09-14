@@ -9,10 +9,10 @@ info:
 servers:
   - url: /api
 tags:
+  - name: Dashboard
   - name: Auth
   - name: Students
   - name: Events
-  - name: Team
   - name: Judges
   - name: Performances
   - name: Marks
@@ -94,6 +94,28 @@ security:
   - cookieAuth: []
 
 paths:
+  /dashboard:
+    get:
+      tags: [Dashboard]
+      summary: Admin dashboard summary counts (admin only)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  totalStudents: { type: integer }
+                  totalEvents: { type: integer }
+                  pendingRequests:
+                    type: object
+                    properties:
+                      total: { type: integer }
+                      scoreChangeRequests: { type: integer }
+        "403":
+          description: Admin access required
+
   /auth/register:
     post:
       tags: [Auth]
@@ -168,9 +190,9 @@ paths:
       summary: List/search students
       parameters:
         - in: query
-          name: q
+          name: search
           schema: { type: string }
-          description: Search by name or ID code
+          description: "Search by name or ID code (alias: q)"
         - in: query
           name: gender
           schema: { type: string, enum: [MALE, FEMALE, OTHER] }
@@ -180,9 +202,28 @@ paths:
         - in: query
           name: team
           schema: { type: string, enum: [A, B] }
+        - in: query
+          name: page
+          schema: { type: integer, default: 1 }
+        - in: query
+          name: pageSize
+          schema: { type: integer, default: 20 }
+          description: Capped at 100
       responses:
         "200":
-          description: List of students
+          description: Paginated list of students
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Student" }
+                  total: { type: integer }
+                  page: { type: integer }
+                  pageSize: { type: integer }
+                  totalPages: { type: integer }
     post:
       tags: [Students]
       summary: Create a student (admin only)
@@ -249,23 +290,6 @@ paths:
       summary: Delete an event (admin only, blocked if marks exist)
       responses:
         "200": { description: Deleted }
-
-  /team:
-    patch:
-      tags: [Team]
-      summary: Assign a student to Team A or Team B (admin only)
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [studentId, team]
-              properties:
-                studentId: { type: string }
-                team: { type: string, enum: [A, B] }
-      responses:
-        "200": { description: Updated }
 
   /judges:
     get:
@@ -464,11 +488,52 @@ paths:
               schema: { type: string }
 
   /profile:
+    get:
+      tags: [Profile]
+      summary: Get the current user's profile and assigned performances (if a judge)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user: { $ref: "#/components/schemas/User" }
+                  performances:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        name: { type: string }
+                        order: { type: integer }
+        "401": { description: Not authenticated }
     patch:
       tags: [Profile]
       summary: Update the current user's name and/or avatar
       responses:
         "200": { description: Updated }
+
+  /profile/change-password:
+    post:
+      tags: [Profile]
+      summary: Change the current user's password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, newPassword, confirmPassword]
+              properties:
+                currentPassword: { type: string }
+                newPassword: { type: string, minLength: 8 }
+                confirmPassword: { type: string }
+      responses:
+        "200": { description: Password changed }
+        "400": { description: Current password incorrect, or newPassword/confirmPassword do not match }
+        "401": { description: Not authenticated }
 
   /upload:
     post:

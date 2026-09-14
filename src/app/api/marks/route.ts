@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireSession, requirePerformanceAccess, apiErrorResponse, parseBody, ApiError } from "@/lib/api-auth";
 import { markEntrySchema } from "@/lib/validators";
 import { calculateFinalScore } from "@/lib/scoring";
+import { notifyAdmins } from "@/lib/notifications";
 
 /**
  * List mark entries for a performance (optionally scoped further by event
@@ -127,6 +128,15 @@ export async function POST(req: NextRequest) {
       });
       results.push(updated);
     }
+
+    const [student, event] = await Promise.all([
+      prisma.student.findUnique({ where: { id: data.studentId }, select: { fullName: true } }),
+      prisma.event.findUnique({ where: { id: data.eventId }, select: { name: true } }),
+    ]);
+    await notifyAdmins(
+      "MARK_ENTRY",
+      `${session.name} submitted marks for ${student?.fullName ?? "a student"} - ${event?.name ?? "an event"}`
+    );
 
     return NextResponse.json({ marks: results }, { status: 201 });
   } catch (err) {

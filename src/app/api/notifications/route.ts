@@ -2,18 +2,21 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin, apiErrorResponse } from "@/lib/api-auth";
 
-/** Recent mark-entry activity across all performances, for the admin notifications feed. */
+/** Persisted notifications for the requesting admin - mark-entry activity and edit requests. */
 export async function GET() {
   try {
-    await requireAdmin();
+    const session = await requireAdmin();
 
-    const marks = await prisma.markEntry.findMany({
-      include: { student: true, event: true, performance: true, judge: { select: { name: true } } },
-      orderBy: { createdAt: "desc" },
-      take: 50,
-    });
+    const [notifications, unreadCount] = await prisma.$transaction([
+      prisma.notification.findMany({
+        where: { recipientId: session.sub },
+        orderBy: { createdAt: "desc" },
+        take: 50,
+      }),
+      prisma.notification.count({ where: { recipientId: session.sub, isRead: false } }),
+    ]);
 
-    return NextResponse.json({ marks });
+    return NextResponse.json({ notifications, unreadCount });
   } catch (err) {
     return apiErrorResponse(err);
   }
