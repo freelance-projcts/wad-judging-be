@@ -81,29 +81,34 @@ export const studentUpdateSchema = studentSchema.partial();
 export const eventSchema = z.object({
   name: z.string().trim().min(1, "Event name is required").max(100),
   gender: z.enum(genders),
+  defaultPerformanceId: z.string().min(1).optional().nullable(),
+  // No .default() here - eventSchema is shared by create AND update (PATCH spreads
+  // the parsed result straight into Prisma with no partial variant), and a zod
+  // default would silently reset this to false on every unrelated PATCH that
+  // doesn't resend it. Omitted means "leave untouched" on update, and falls
+  // through to the Prisma column's own @default(false) on create.
+  supportsMultipleRounds: z.boolean().optional(),
 });
 
-export const roundScoresSchema = z.object({
-  round: z.number().int().min(1).max(10),
-  d: z.number().min(0).max(10),
-  dSupervisor: z.string().trim().max(150).optional().nullable(),
-  e1: z.number().min(0).max(10),
-  e1Supervisor: z.string().trim().max(150).optional().nullable(),
-  e2: z.number().min(0).max(10),
-  e2Supervisor: z.string().trim().max(150).optional().nullable(),
-  e3: z.number().min(0).max(10),
-  e3Supervisor: z.string().trim().max(150).optional().nullable(),
-  e4: z.number().min(0).max(10),
-  e4Supervisor: z.string().trim().max(150).optional().nullable(),
-  p: z.number().min(0).max(10).default(0),
-  pSupervisor: z.string().trim().max(150).optional().nullable(),
+/** D/E1-E4/P are each judge's own mark - no separate "supervisor" field per score. */
+export const markScoresSchema = z.object({
+  D: z.number().min(0).max(10),
+  E1: z.number().min(0).max(10),
+  E2: z.number().min(0).max(10),
+  E3: z.number().min(0).max(10),
+  E4: z.number().min(0).max(10),
+  P: z.number().min(0).max(10).default(0),
 });
 
 export const markEntrySchema = z.object({
   studentId: z.string().min(1),
   eventId: z.string().min(1),
   performanceId: z.string().min(1),
-  rounds: z.array(roundScoresSchema).min(1, "At least one round is required"),
+  // Most events are single-round; a configurable few (Event.supportsMultipleRounds)
+  // allow exactly 2. The hard cap of 2 is enforced here - whether 2 is actually
+  // allowed for a given event is an application-level check in mark-service.ts.
+  round: z.number().int().min(1).max(2).optional().default(1),
+  scores: markScoresSchema,
 });
 
 export const editRequestCreateSchema = z.object({

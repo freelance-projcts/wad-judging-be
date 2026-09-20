@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession, requirePerformanceAccess, apiErrorResponse, ApiError } from "@/lib/api-auth";
-import { getResultsForExport, toCsv } from "@/lib/results";
+import { getMarksForExport, toCsv } from "@/lib/result-service";
+import { toScoreBreakdown } from "@/lib/scoring";
 import { provinceLabels } from "@/lib/validators";
 import type { Gender, Province } from "@prisma/client";
 
@@ -17,7 +18,7 @@ export async function GET(req: NextRequest) {
     }
     await requirePerformanceAccess(performanceId);
 
-    const entries = await getResultsForExport(performanceId, gender, eventId ?? undefined);
+    const entries = await getMarksForExport(performanceId, gender, eventId ?? undefined);
 
     const rows = entries.map((e) => ({
       StudentID: e.student.code,
@@ -32,7 +33,7 @@ export async function GET(req: NextRequest) {
       E3: e.e3Score.toString(),
       E4: e.e4Score.toString(),
       Penalty: e.penaltyScore.toString(),
-      Final: e.finalScore.toString(),
+      Final: toScoreBreakdown(e).finalScore.toString(),
     }));
 
     const csv = toCsv(rows);

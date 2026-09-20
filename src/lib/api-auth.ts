@@ -23,6 +23,14 @@ export function apiErrorResponse(err: unknown): NextResponse {
   ) {
     return NextResponse.json({ error: "A record with this value already exists" }, { status: 409 });
   }
+  if (
+    err &&
+    typeof err === "object" &&
+    "code" in err &&
+    (err as { code: string }).code === "P2003"
+  ) {
+    return NextResponse.json({ error: "Referenced record does not exist" }, { status: 400 });
+  }
   console.error(err);
   return NextResponse.json({ error: "Internal server error" }, { status: 500 });
 }

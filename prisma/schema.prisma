@@ -58,11 +58,11 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  judgeAssignments JudgeAssignment[]
-  markEntries      MarkEntry[]       @relation("MarkEntryJudge")
-  editRequestsMade EditRequest[]     @relation("EditRequestRequester")
-  editRequestsHandled EditRequest[]  @relation("EditRequestResolver")
-  notifications    Notification[]
+  judgeAssignments    JudgeAssignment[]
+  markEntries         MarkEntry[]       @relation("MarkEntryJudge")
+  editRequestsMade    EditRequest[]     @relation("EditRequestRequester")
+  editRequestsHandled EditRequest[]     @relation("EditRequestResolver")
+  notifications       Notification[]
 
   @@map("users")
 }
@@ -89,15 +89,16 @@ model Performance {
 
   judgeAssignments JudgeAssignment[]
   markEntries      MarkEntry[]
+  defaultForEvents Event[]           @relation("EventDefaultPerformance")
 
   @@map("performances")
 }
 
 model JudgeAssignment {
-  id            String      @id @default(cuid())
+  id            String   @id @default(cuid())
   judgeId       String
   performanceId String
-  createdAt     DateTime    @default(now())
+  createdAt     DateTime @default(now())
 
   judge       User        @relation(fields: [judgeId], references: [id], onDelete: Cascade)
   performance Performance @relation(fields: [performanceId], references: [id], onDelete: Cascade)
@@ -107,15 +108,19 @@ model JudgeAssignment {
 }
 
 model Event {
-  id        String   @id @default(cuid())
-  name      String
-  gender    Gender
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                     String   @id @default(cuid())
+  name                   String
+  gender                 Gender
+  defaultPerformanceId   String?
+  supportsMultipleRounds Boolean  @default(false)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 
-  markEntries MarkEntry[]
+  markEntries        MarkEntry[]
+  defaultPerformance Performance? @relation("EventDefaultPerformance", fields: [defaultPerformanceId], references: [id], onDelete: SetNull)
 
   @@unique([name, gender])
+  @@index([defaultPerformanceId])
   @@map("events")
 }
 
@@ -139,26 +144,20 @@ model Student {
 }
 
 model MarkEntry {
-  id            String   @id @default(cuid())
+  id            String @id @default(cuid())
   studentId     String
   eventId       String
   performanceId String
-  round         Int      @default(1)
+  round         Int    @default(1)
   judgeId       String
 
-  dScore           Decimal @db.Decimal(5, 2)
-  dSupervisor      String?
-  e1Score          Decimal @db.Decimal(5, 2)
-  e1Supervisor     String?
-  e2Score          Decimal @db.Decimal(5, 2)
-  e2Supervisor     String?
-  e3Score          Decimal @db.Decimal(5, 2)
-  e3Supervisor     String?
-  e4Score          Decimal @db.Decimal(5, 2)
-  e4Supervisor     String?
-  penaltyScore     Decimal @db.Decimal(5, 2) @default(0)
-  penaltySupervisor String?
-  finalScore       Decimal @db.Decimal(6, 2)
+  dScore       Decimal @db.Decimal(10, 3)
+  e1Score      Decimal @db.Decimal(10, 3)
+  e2Score      Decimal @db.Decimal(10, 3)
+  e3Score      Decimal @db.Decimal(10, 3)
+  e4Score      Decimal @db.Decimal(10, 3)
+  penaltyScore Decimal @default(0) @db.Decimal(10, 3)
+  finalScore   Decimal @db.Decimal(10, 3)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -177,18 +176,18 @@ model MarkEntry {
 }
 
 model EditRequest {
-  id           String             @id @default(cuid())
+  id           String            @id @default(cuid())
   markEntryId  String
   requesterId  String
   reason       String?
-  status       EditRequestStatus  @default(PENDING)
+  status       EditRequestStatus @default(PENDING)
   resolvedById String?
   resolvedAt   DateTime?
-  createdAt    DateTime           @default(now())
+  createdAt    DateTime          @default(now())
 
-  markEntry  MarkEntry @relation(fields: [markEntryId], references: [id], onDelete: Cascade)
-  requester  User      @relation("EditRequestRequester", fields: [requesterId], references: [id])
-  resolver   User?     @relation("EditRequestResolver", fields: [resolvedById], references: [id])
+  markEntry MarkEntry @relation(fields: [markEntryId], references: [id], onDelete: Cascade)
+  requester User      @relation("EditRequestRequester", fields: [requesterId], references: [id])
+  resolver  User?     @relation("EditRequestResolver", fields: [resolvedById], references: [id])
 
   @@index([status])
   @@map("edit_requests")

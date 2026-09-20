@@ -1,48 +1,75 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireSession, requirePerformanceAccess, apiErrorResponse, parseBody, ApiError } from "@/lib/api-auth";
-import { markEntrySchema } from "@/lib/validators";
-import { calculateFinalScore } from "@/lib/scoring";
+import { requireSession, requirePerformanceAccess, apiErrorResponse, parseBody } from "@/lib/api-auth";
+import { markEntrySchema, genders, provinces, teams, normalizeEnumParam } from "@/lib/validators";
+import { toScoreBreakdown } from "@/lib/scoring";
+import { upsertMarkEntry } from "@/lib/mark-service";
 import { notifyAdmins } from "@/lib/notifications";
+import type { Prisma } from "@prisma/client";
 
 /**
- * List mark entries for a performance (optionally scoped further by event
- * and/or student). Used by the marks-entry screen to know which students
- * already have marks recorded, and by results/notification views.
+ * List mark entries. Filters are all optional; if performanceId is omitted a
+ * judge is scoped to their own assigned performance(s), while an admin sees
+ * everything - this mirrors the students/events list endpoints' pattern.
  */
 export async function GET(req: NextRequest) {
   try {
-    await requireSession();
+    const session = await requireSession();
     const { searchParams } = new URL(req.url);
     const performanceId = searchParams.get("performanceId");
     const eventId = searchParams.get("eventId");
     const studentId = searchParams.get("studentId");
+    const gender = normalizeEnumParam(searchParams.get("gender"), genders);
+    const province = normalizeEnumParam(searchParams.get("province"), provinces);
+    const team = normalizeEnumParam(searchParams.get("team"), teams);
 
-    if (!performanceId) throw new ApiError(400, "performanceId is required");
-    await requirePerformanceAccess(performanceId);
+    if (gender.invalid || province.invalid || team.invalid) {
+      return NextResponse.json({ marks: [] });
+    }
+
+    const where: Prisma.MarkEntryWhereInput = {};
+
+    if (performanceId) {
+      await requirePerformanceAccess(performanceId);
+      where.performanceId = performanceId;
+    } else if (session.role !== "ADMIN") {
+      const assignments = await prisma.judgeAssignment.findMany({
+        where: { judgeId: session.sub },
+        select: { performanceId: true },
+      });
+      if (assignments.length === 0) return NextResponse.json({ marks: [] });
+      where.performanceId = { in: assignments.map((a) => a.performanceId) };
+    }
+
+    if (eventId) where.eventId = eventId;
+    if (studentId) where.studentId = studentId;
+    if (gender.value || province.value || team.value) {
+      where.student = {
+        ...(gender.value ? { gender: gender.value } : {}),
+        ...(province.value ? { province: province.value } : {}),
+        ...(team.value ? { team: team.value } : {}),
+      };
+    }
 
     const marks = await prisma.markEntry.findMany({
-      where: {
-        performanceId,
-        ...(eventId ? { eventId } : {}),
-        ...(studentId ? { studentId } : {}),
-      },
+      where,
       include: { student: true, event: true, judge: { select: { id: true, name: true } } },
-      orderBy: [{ studentId: "asc" }, { round: "asc" }],
+      orderBy: [{ studentId: "asc" }, { eventId: "asc" }, { round: "asc" }],
     });
 
-    return NextResponse.json({ marks });
+    return NextResponse.json({
+      marks: marks.map((mark) => ({ ...mark, scoreBreakdown: toScoreBreakdown(mark) })),
+    });
   } catch (err) {
     return apiErrorResponse(err);
   }
 }
 
 /**
- * Create or update marks for a student/event/performance across one or more
- * rounds. Creating a brand-new round is always allowed for an assigned
- * judge. Editing an EXISTING round's marks requires the judge to hold an
- * APPROVED, unconsumed edit request for that specific mark entry (or be an
- * admin) - enforced here, not just hidden in the UI.
+ * Create or update the single mark entry for a student/event/performance.
+ * Creating a brand-new entry is always allowed for an assigned judge.
+ * Editing an existing entry requires the judge to hold an APPROVED,
+ * unconsumed edit request for it (or be an admin).
  */
 export async function POST(req: NextRequest) {
   try {
@@ -52,82 +79,11 @@ export async function POST(req: NextRequest) {
 
     await requirePerformanceAccess(data.performanceId);
 
-    const results = [];
-
-    for (const round of data.rounds) {
-      const existing = await prisma.markEntry.findUnique({
-        where: {
-          studentId_eventId_performanceId_round: {
-            studentId: data.studentId,
-            eventId: data.eventId,
-            performanceId: data.performanceId,
-            round: round.round,
-          },
-        },
-      });
-
-      const finalScore = calculateFinalScore({
-        d: round.d,
-        e1: round.e1,
-        e2: round.e2,
-        e3: round.e3,
-        e4: round.e4,
-        p: round.p,
-      });
-
-      const payload = {
-        dScore: round.d,
-        dSupervisor: round.dSupervisor ?? null,
-        e1Score: round.e1,
-        e1Supervisor: round.e1Supervisor ?? null,
-        e2Score: round.e2,
-        e2Supervisor: round.e2Supervisor ?? null,
-        e3Score: round.e3,
-        e3Supervisor: round.e3Supervisor ?? null,
-        e4Score: round.e4,
-        e4Supervisor: round.e4Supervisor ?? null,
-        penaltyScore: round.p,
-        penaltySupervisor: round.pSupervisor ?? null,
-        finalScore,
-      };
-
-      if (!existing) {
-        const created = await prisma.markEntry.create({
-          data: {
-            studentId: data.studentId,
-            eventId: data.eventId,
-            performanceId: data.performanceId,
-            round: round.round,
-            judgeId: session.sub,
-            ...payload,
-          },
-        });
-        results.push(created);
-        continue;
-      }
-
-      // Editing an already-submitted round.
-      if (session.role !== "ADMIN") {
-        const approvedRequest = await prisma.editRequest.findFirst({
-          where: { markEntryId: existing.id, requesterId: session.sub, status: "APPROVED" },
-          orderBy: { createdAt: "desc" },
-        });
-        if (!approvedRequest) {
-          throw new ApiError(
-            403,
-            `Editing marks for round ${round.round} requires an approved edit request`
-          );
-        }
-        // Consume the approval so it can't be reused for future edits.
-        await prisma.editRequest.delete({ where: { id: approvedRequest.id } });
-      }
-
-      const updated = await prisma.markEntry.update({
-        where: { id: existing.id },
-        data: { judgeId: session.sub, ...payload },
-      });
-      results.push(updated);
-    }
+    const mark = await upsertMarkEntry(
+      session,
+      { studentId: data.studentId, eventId: data.eventId, performanceId: data.performanceId, round: data.round },
+      data.scores
+    );
 
     const [student, event] = await Promise.all([
       prisma.student.findUnique({ where: { id: data.studentId }, select: { fullName: true } }),
@@ -138,7 +94,10 @@ export async function POST(req: NextRequest) {
       `${session.name} submitted marks for ${student?.fullName ?? "a student"} - ${event?.name ?? "an event"}`
     );
 
-    return NextResponse.json({ marks: results }, { status: 201 });
+    return NextResponse.json(
+      { mark: { ...mark, scoreBreakdown: toScoreBreakdown(mark) } },
+      { status: 201 }
+    );
   } catch (err) {
     return apiErrorResponse(err);
   }

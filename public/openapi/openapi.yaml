@@ -73,7 +73,7 @@ components:
         studentId: { type: string }
         eventId: { type: string }
         performanceId: { type: string }
-        round: { type: integer }
+        round: { type: integer, description: "1, or 2 if the event's supportsMultipleRounds is true" }
         dScore: { type: string }
         e1Score: { type: string }
         e2Score: { type: string }
@@ -81,6 +81,15 @@ components:
         e4Score: { type: string }
         penaltyScore: { type: string }
         finalScore: { type: string }
+        scoreBreakdown:
+          type: object
+          properties:
+            countedEScores: { type: array, items: { type: number }, minItems: 2, maxItems: 2 }
+            ignoredEScores:
+              type: object
+              properties: { min: { type: number }, max: { type: number } }
+            eAverage: { type: number }
+            finalScore: { type: number }
     EditRequest:
       type: object
       properties:
@@ -271,6 +280,18 @@ paths:
     post:
       tags: [Events]
       summary: Create an event (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, gender]
+              properties:
+                name: { type: string }
+                gender: { type: string, enum: [MALE, FEMALE, OTHER] }
+                defaultPerformanceId: { type: string, nullable: true, description: "Which performance's marks count toward All-Rounders for this event" }
+                supportsMultipleRounds: { type: boolean, default: false, description: "Whether this event accepts a round 2 mark submission" }
       responses:
         "201": { description: Created }
 
@@ -283,6 +304,18 @@ paths:
     patch:
       tags: [Events]
       summary: Update an event (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, gender]
+              properties:
+                name: { type: string }
+                gender: { type: string, enum: [MALE, FEMALE, OTHER] }
+                defaultPerformanceId: { type: string, nullable: true }
+                supportsMultipleRounds: { type: boolean, description: "Omit to leave unchanged" }
       responses:
         "200": { description: Updated }
     delete:
@@ -330,11 +363,14 @@ paths:
   /marks:
     get:
       tags: [Marks]
-      summary: List mark entries for a performance (judge must be assigned; admin unrestricted)
+      summary: List mark entries, optionally filtered
+      description: >
+        If performanceId is omitted, a judge is scoped to their own assigned
+        performance(s); an admin sees everything. gender/province/team filter
+        through the student relation.
       parameters:
         - in: query
           name: performanceId
-          required: true
           schema: { type: string }
         - in: query
           name: eventId
@@ -342,43 +378,55 @@ paths:
         - in: query
           name: studentId
           schema: { type: string }
+        - in: query
+          name: gender
+          schema: { type: string, enum: [MALE, FEMALE, OTHER] }
+        - in: query
+          name: province
+          schema: { type: string }
+        - in: query
+          name: team
+          schema: { type: string, enum: [A, B] }
       responses:
         "200": { description: OK }
         "403": { description: Not assigned to this performance }
     post:
       tags: [Marks]
-      summary: Create or update marks (one or more rounds) for a student/event/performance
+      summary: Create or update a mark entry for a student/event/performance/round
       description: >
-        Creating a brand-new round is always allowed for an assigned judge.
-        Editing an existing round requires the judge to hold an APPROVED,
-        unconsumed edit request for that mark entry (or be an admin).
+        The identity is (studentId, eventId, performanceId, round). Most
+        events are single-round (round defaults to 1); a configurable subset
+        of events (Event.supportsMultipleRounds) also accept round 2 -
+        submitting round 2 for an event that doesn't support it returns 400.
+        Creating a brand-new entry for a given round is always allowed for an
+        assigned judge. Editing an existing entry requires the judge to hold
+        an APPROVED, unconsumed edit request for that specific mark entry (or
+        be an admin) - each round's approval is tracked separately.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [studentId, eventId, performanceId, rounds]
+              required: [studentId, eventId, performanceId, scores]
               properties:
                 studentId: { type: string }
                 eventId: { type: string }
                 performanceId: { type: string }
-                rounds:
-                  type: array
-                  items:
-                    type: object
-                    required: [round, d, e1, e2, e3, e4]
-                    properties:
-                      round: { type: integer }
-                      d: { type: number }
-                      dSupervisor: { type: string, nullable: true }
-                      e1: { type: number }
-                      e2: { type: number }
-                      e3: { type: number }
-                      e4: { type: number }
-                      p: { type: number, default: 0 }
+                round: { type: integer, minimum: 1, maximum: 2, default: 1 }
+                scores:
+                  type: object
+                  required: [D, E1, E2, E3, E4]
+                  properties:
+                    D: { type: number }
+                    E1: { type: number }
+                    E2: { type: number }
+                    E3: { type: number }
+                    E4: { type: number }
+                    P: { type: number, default: 0 }
       responses:
-        "201": { description: Marks saved }
+        "201": { description: Mark saved }
+        "400": { description: round 2 requested but this event does not support multiple rounds }
         "403": { description: Editing requires an approved edit request }
 
   /marks/{id}:
@@ -392,6 +440,27 @@ paths:
       summary: Get a single mark entry
       responses:
         "200": { description: OK }
+    put:
+      tags: [Marks]
+      summary: Edit an existing mark entry's scores (always requires an approved edit request, or admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [D, E1, E2, E3, E4]
+              properties:
+                D: { type: number }
+                E1: { type: number }
+                E2: { type: number }
+                E3: { type: number }
+                E4: { type: number }
+                P: { type: number, default: 0 }
+      responses:
+        "200": { description: Mark updated }
+        "403": { description: Editing requires an approved edit request }
+        "404": { description: Mark entry not found }
 
   /edit-requests:
     get:
@@ -443,26 +512,192 @@ paths:
       responses:
         "200": { description: OK }
 
-  /results:
+  /results/team-performance:
     get:
       tags: [Results]
-      summary: Aggregated results (team totals, top 8, all-rounders) for a performance
+      summary: Team Performance - Performance 1, event-specific, province -> Team A/B -> top 5 -> teamTotal
       parameters:
         - in: query
-          name: performanceId
+          name: eventId
           required: true
           schema: { type: string }
-        - in: query
-          name: view
-          schema: { type: string, enum: [team, top8, all-rounders] }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  eventId: { type: string }
+                  eventName: { type: string }
+                  performanceId: { type: string }
+                  performanceName: { type: string }
+                  provinces:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        province: { type: string }
+                        provinceLabel: { type: string }
+                        teams:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              team: { type: string, enum: [A, B] }
+                              teamTotal: { type: number }
+                              countedStudentCount: { type: integer }
+                              students:
+                                type: array
+                                items:
+                                  type: object
+                                  properties:
+                                    rank: { type: integer }
+                                    studentId: { type: string }
+                                    code: { type: string }
+                                    fullName: { type: string }
+                                    finalScore: { type: number }
+                                    countedTowardTotal: { type: boolean }
+        "400": { description: eventId is required }
+        "403": { description: Not assigned to Performance 1 }
+
+  /results/top-eight:
+    get:
+      tags: [Results]
+      summary: Top Eight - Performance 1, event-specific, ignores team, top 3 (plus ties) per province
+      parameters:
         - in: query
           name: eventId
+          required: true
           schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  eventId: { type: string }
+                  eventName: { type: string }
+                  performanceId: { type: string }
+                  performanceName: { type: string }
+                  provinces:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        province: { type: string }
+                        provinceLabel: { type: string }
+                        students:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              rank: { type: integer }
+                              studentId: { type: string }
+                              code: { type: string }
+                              fullName: { type: string }
+                              team: { type: string, nullable: true, enum: [A, B, null] }
+                              finalScore: { type: number }
+        "400": { description: eventId is required }
+        "403": { description: Not assigned to Performance 1 }
+
+  /results/performance-two:
+    get:
+      tags: [Results]
+      summary: Performance Two - same formula, flat top 8 (plus ties at the cutoff, never truncated)
+      parameters:
+        - in: query
+          name: eventId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  eventId: { type: string }
+                  eventName: { type: string }
+                  performanceId: { type: string }
+                  performanceName: { type: string }
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        rank: { type: integer }
+                        studentId: { type: string }
+                        code: { type: string }
+                        fullName: { type: string }
+                        province: { type: string }
+                        provinceLabel: { type: string }
+                        team: { type: string, nullable: true, enum: [A, B, null] }
+                        finalScore: { type: number }
+        "400": { description: eventId is required }
+        "403": { description: Not assigned to Performance 2 }
+
+  /results/all-rounders:
+    get:
+      tags: [Results]
+      summary: All Rounders - cross-event total using each event's configured performance (admin only)
+      parameters:
         - in: query
           name: gender
           schema: { type: string, enum: [MALE, FEMALE, OTHER] }
+        - in: query
+          name: province
+          schema: { type: string }
+        - in: query
+          name: team
+          schema: { type: string, enum: [A, B] }
       responses:
-        "200": { description: OK }
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  events:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        name: { type: string }
+                        performanceId: { type: string }
+                        performanceName: { type: string }
+                  students:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        rank: { type: integer }
+                        studentId: { type: string }
+                        code: { type: string }
+                        fullName: { type: string }
+                        gender: { type: string }
+                        province: { type: string }
+                        team: { type: string, nullable: true, enum: [A, B, null] }
+                        totalScore: { type: number }
+                        eventsScored: { type: integer }
+                        events:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              eventId: { type: string }
+                              eventName: { type: string }
+                              performanceId: { type: string }
+                              performanceName: { type: string }
+                              hasMark: { type: boolean }
+                              finalScore: { type: number, nullable: true }
+        "403": { description: Admin access required }
 
   /results/download:
     get:
