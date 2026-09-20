@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { ApiError } from "@/lib/api-auth";
-import { calculateFinalScore } from "@/lib/scoring";
+import { calculateFinalScore, toScoreBreakdown } from "@/lib/scoring";
 import type { SessionPayload } from "@/lib/auth";
 import type { MarkEntry, Prisma } from "@prisma/client";
 
@@ -97,6 +97,57 @@ export async function upsertMarkEntry(
       data: { judgeId: session.sub, ...payload },
     });
   });
+}
+
+export interface MarkWithPendingRequest extends MarkEntry {
+  scoreBreakdown: ReturnType<typeof toScoreBreakdown>;
+  pendingEditRequest: { id: string; reason: string | null; createdAt: Date } | null;
+}
+
+/**
+ * Attach each student's mark(s) for a given event+performance (one row per
+ * round - empty if none entered yet), each carrying whether it currently has
+ * a PENDING edit request. Used by the marks-entry roster endpoints so the UI
+ * can show "pending approval" instead of letting a judge file a duplicate
+ * request. Two queries total regardless of how many students are passed in.
+ */
+export async function attachMarksToStudents<T extends { id: string }>(
+  students: T[],
+  eventId: string,
+  performanceId: string
+): Promise<(T & { marks: MarkWithPendingRequest[] })[]> {
+  const studentIds = students.map((s) => s.id);
+  const marks = studentIds.length
+    ? await prisma.markEntry.findMany({
+        where: { studentId: { in: studentIds }, eventId, performanceId },
+        orderBy: { round: "asc" },
+      })
+    : [];
+
+  const markIds = marks.map((m) => m.id);
+  const pendingRequests = markIds.length
+    ? await prisma.editRequest.findMany({
+        where: { markEntryId: { in: markIds }, status: "PENDING" },
+      })
+    : [];
+  const pendingByMarkId = new Map(pendingRequests.map((r) => [r.markEntryId, r]));
+
+  const marksByStudentId = new Map<string, MarkWithPendingRequest[]>();
+  for (const mark of marks) {
+    const pending = pendingByMarkId.get(mark.id);
+    const enriched: MarkWithPendingRequest = {
+      ...mark,
+      scoreBreakdown: toScoreBreakdown(mark),
+      pendingEditRequest: pending
+        ? { id: pending.id, reason: pending.reason, createdAt: pending.createdAt }
+        : null,
+    };
+    const group = marksByStudentId.get(mark.studentId) ?? [];
+    group.push(enriched);
+    marksByStudentId.set(mark.studentId, group);
+  }
+
+  return students.map((student) => ({ ...student, marks: marksByStudentId.get(student.id) ?? [] }));
 }
 
 /** Edit an EXISTING mark entry by id - always requires a consumed approval (no free-create path). */

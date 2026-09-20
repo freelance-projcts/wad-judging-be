@@ -247,6 +247,78 @@ paths:
         "403":
           description: Admin access required
 
+  /students/marks:
+    get:
+      tags: [Students, Marks]
+      summary: Marks-entry roster for a selected event/performance
+      description: >
+        Every student (same gender/province/team/search filters and
+        pagination as GET /students), each with their mark(s) for this
+        event+performance if any (empty array if not yet entered), and
+        whether a PENDING edit request already exists for each mark.
+      parameters:
+        - in: query
+          name: eventId
+          required: true
+          schema: { type: string }
+        - in: query
+          name: performanceId
+          required: true
+          schema: { type: string }
+        - in: query
+          name: search
+          schema: { type: string }
+        - in: query
+          name: gender
+          schema: { type: string, enum: [MALE, FEMALE, OTHER] }
+        - in: query
+          name: province
+          schema: { type: string }
+        - in: query
+          name: team
+          schema: { type: string, enum: [A, B] }
+        - in: query
+          name: page
+          schema: { type: integer, default: 1 }
+        - in: query
+          name: pageSize
+          schema: { type: integer, default: 20 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      allOf:
+                        - $ref: "#/components/schemas/Student"
+                        - type: object
+                          properties:
+                            marks:
+                              type: array
+                              items:
+                                allOf:
+                                  - $ref: "#/components/schemas/MarkEntry"
+                                  - type: object
+                                    properties:
+                                      pendingEditRequest:
+                                        type: object
+                                        nullable: true
+                                        properties:
+                                          id: { type: string }
+                                          reason: { type: string, nullable: true }
+                                          createdAt: { type: string, format: date-time }
+                  total: { type: integer }
+                  page: { type: integer }
+                  pageSize: { type: integer }
+                  totalPages: { type: integer }
+        "400": { description: eventId or performanceId missing }
+        "403": { description: Not assigned to this performance }
+
   /students/{id}:
     parameters:
       - in: path
@@ -603,6 +675,57 @@ paths:
                               finalScore: { type: number }
         "400": { description: eventId is required }
         "403": { description: Not assigned to Performance 1 }
+
+  /results/top-eight/marks:
+    get:
+      tags: [Results, Marks]
+      summary: Performance 2 marks-entry roster, scoped to this event's Top Eight qualifiers (Performance 1 ranking)
+      description: >
+        Unlike GET /students/marks (the full roster), this only includes
+        students who qualified via this event's Top Eight results under
+        Performance 1, and shows their Performance 2 mark(s) - same
+        pendingEditRequest shape per mark.
+      parameters:
+        - in: query
+          name: eventId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  eventId: { type: string }
+                  eventName: { type: string }
+                  performanceId: { type: string, description: Performance 2's id }
+                  performanceName: { type: string }
+                  students:
+                    type: array
+                    items:
+                      allOf:
+                        - $ref: "#/components/schemas/Student"
+                        - type: object
+                          properties:
+                            topEightRank: { type: integer, description: "Rank within their province from Performance 1's Top Eight" }
+                            marks:
+                              type: array
+                              items:
+                                allOf:
+                                  - $ref: "#/components/schemas/MarkEntry"
+                                  - type: object
+                                    properties:
+                                      pendingEditRequest:
+                                        type: object
+                                        nullable: true
+                                        properties:
+                                          id: { type: string }
+                                          reason: { type: string, nullable: true }
+                                          createdAt: { type: string, format: date-time }
+        "400": { description: eventId is required }
+        "403": { description: Not assigned to Performance 2 }
 
   /results/performance-two:
     get:
