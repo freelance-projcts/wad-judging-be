@@ -39,11 +39,6 @@ export async function POST(req: NextRequest) {
     });
     if (!markEntry) throw new ApiError(404, "Mark entry not found");
 
-    const assignment = await prisma.judgeAssignment.findUnique({
-      where: { judgeId_performanceId: { judgeId: session.sub, performanceId: markEntry.performanceId } },
-    });
-    if (!assignment) throw new ApiError(403, "You are not assigned to this performance");
-
     const existingPending = await prisma.editRequest.findFirst({
       where: { markEntryId: data.markEntryId, requesterId: session.sub, status: "PENDING" },
     });
