@@ -7,6 +7,18 @@ import type { Gender, Province, Team } from "@prisma/client";
 
 type TeamValue = "A" | "B";
 
+/** Raw judge marks for a single round - D/E1-E4/P as entered, plus that round's own final score. */
+export interface RoundMark {
+  round: number;
+  d: number;
+  e1: number;
+  e2: number;
+  e3: number;
+  e4: number;
+  p: number;
+  finalScore: number;
+}
+
 interface ScoredStudent {
   studentId: string;
   code: string;
@@ -14,6 +26,7 @@ interface ScoredStudent {
   province: Province;
   team: TeamValue | null;
   finalScore: number;
+  marks: RoundMark[];
 }
 
 async function requireEvent(eventId: string) {
@@ -23,12 +36,35 @@ async function requireEvent(eventId: string) {
 }
 
 interface DecimalScoreFields {
+  round: number;
   dScore: unknown;
   e1Score: unknown;
   e2Score: unknown;
   e3Score: unknown;
   e4Score: unknown;
   penaltyScore: unknown;
+}
+
+/** The raw per-judge D/E1-E4/P values for one round, plus that round's own final score. */
+function toRoundMark(entry: DecimalScoreFields): RoundMark {
+  const breakdown = toScoreBreakdown(entry as Parameters<typeof toScoreBreakdown>[0]);
+  return {
+    round: entry.round,
+    d: Number(entry.dScore),
+    e1: Number(entry.e1Score),
+    e2: Number(entry.e2Score),
+    e3: Number(entry.e3Score),
+    e4: Number(entry.e4Score),
+    p: Number(entry.penaltyScore),
+    finalScore: breakdown.finalScore,
+  };
+}
+
+function toRoundMarks(entries: DecimalScoreFields[]): RoundMark[] {
+  return entries
+    .slice()
+    .sort((a, b) => a.round - b.round)
+    .map(toRoundMark);
 }
 
 /**
@@ -42,7 +78,7 @@ function averageFinalScore(entries: DecimalScoreFields[]): number {
   return Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 1000) / 1000;
 }
 
-/** One row per student for the given event+performance - averaged across whatever rounds exist. */
+/** One row per student for the given event+performance - averaged across whatever rounds exist, with each round's raw marks attached. */
 async function scoredStudentsFor(eventId: string, performanceId: string): Promise<ScoredStudent[]> {
   const entries = await prisma.markEntry.findMany({
     where: { eventId, performanceId },
@@ -63,6 +99,7 @@ async function scoredStudentsFor(eventId: string, performanceId: string): Promis
     province: student.province,
     team: student.team as TeamValue | null,
     finalScore: averageFinalScore(rounds),
+    marks: toRoundMarks(rounds),
   }));
 }
 
@@ -97,6 +134,7 @@ export interface TeamPerformanceStudentRow {
   code: string;
   fullName: string;
   finalScore: number;
+  marks: RoundMark[];
   countedTowardTotal: boolean;
 }
 export interface TeamPerformanceTeamGroup {
@@ -119,7 +157,7 @@ export interface TeamPerformanceResponse {
 }
 
 function omitProvinceTeam(s: ScoredStudent) {
-  return { studentId: s.studentId, code: s.code, fullName: s.fullName, finalScore: s.finalScore };
+  return { studentId: s.studentId, code: s.code, fullName: s.fullName, finalScore: s.finalScore, marks: s.marks };
 }
 
 export async function getTeamPerformanceResults(eventId: string): Promise<TeamPerformanceResponse> {
@@ -175,6 +213,7 @@ export interface TopEightStudentRow {
   fullName: string;
   team: TeamValue | null;
   finalScore: number;
+  marks: RoundMark[];
 }
 export interface TopEightProvinceGroup {
   province: Province;
@@ -212,6 +251,7 @@ export async function getTopEightResults(eventId: string): Promise<TopEightRespo
         fullName: s.fullName,
         team: s.team,
         finalScore: s.finalScore,
+        marks: s.marks,
       })),
     });
   }
@@ -238,6 +278,7 @@ export interface PerformanceTwoStudentRow {
   provinceLabel: string;
   team: TeamValue | null;
   finalScore: number;
+  marks: RoundMark[];
 }
 export interface PerformanceTwoResponse {
   eventId: string;
@@ -270,6 +311,7 @@ export async function getPerformanceTwoResults(eventId: string): Promise<Perform
       provinceLabel: provinceLabels[s.province],
       team: s.team,
       finalScore: s.finalScore,
+      marks: s.marks,
     })),
   };
 }
@@ -285,6 +327,7 @@ export interface AllRounderEventBreakdown {
   performanceName: string | null;
   hasMark: boolean;
   finalScore: number | null;
+  marks: RoundMark[];
 }
 export interface AllRounderStudentRow {
   rank: number;
@@ -350,6 +393,7 @@ export async function getAllRounderResults(filters?: {
           performanceName: performanceNameById.get(performanceId) ?? null,
           hasMark: rounds.length > 0,
           finalScore: rounds.length > 0 ? averageFinalScore(rounds) : null,
+          marks: toRoundMarks(rounds),
         };
       });
 

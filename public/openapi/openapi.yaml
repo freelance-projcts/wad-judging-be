@@ -90,6 +90,18 @@ components:
               properties: { min: { type: number }, max: { type: number } }
             eAverage: { type: number }
             finalScore: { type: number }
+    RoundMark:
+      type: object
+      description: The raw judge marks for a single round, plus that round's own final score.
+      properties:
+        round: { type: integer }
+        d: { type: number }
+        e1: { type: number }
+        e2: { type: number }
+        e3: { type: number }
+        e4: { type: number }
+        p: { type: number }
+        finalScore: { type: number }
     EditRequest:
       type: object
       properties:
@@ -630,6 +642,9 @@ paths:
                                     code: { type: string }
                                     fullName: { type: string }
                                     finalScore: { type: number }
+                                    marks:
+                                      type: array
+                                      items: { $ref: "#/components/schemas/RoundMark" }
                                     countedTowardTotal: { type: boolean }
         "400": { description: eventId is required }
         "403": { description: Not assigned to Performance 1 }
@@ -673,6 +688,9 @@ paths:
                               fullName: { type: string }
                               team: { type: string, nullable: true, enum: [A, B, null] }
                               finalScore: { type: number }
+                              marks:
+                                type: array
+                                items: { $ref: "#/components/schemas/RoundMark" }
         "400": { description: eventId is required }
         "403": { description: Not assigned to Performance 1 }
 
@@ -761,6 +779,9 @@ paths:
                         provinceLabel: { type: string }
                         team: { type: string, nullable: true, enum: [A, B, null] }
                         finalScore: { type: number }
+                        marks:
+                          type: array
+                          items: { $ref: "#/components/schemas/RoundMark" }
         "400": { description: eventId is required }
         "403": { description: Not assigned to Performance 2 }
 
@@ -820,6 +841,9 @@ paths:
                               performanceName: { type: string }
                               hasMark: { type: boolean }
                               finalScore: { type: number, nullable: true }
+                              marks:
+                                type: array
+                                items: { $ref: "#/components/schemas/RoundMark" }
         "403": { description: Admin access required }
 
   /results/download:
