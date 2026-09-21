@@ -78,10 +78,21 @@ function averageFinalScore(entries: DecimalScoreFields[]): number {
   return Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 1000) / 1000;
 }
 
-/** One row per student for the given event+performance - averaged across whatever rounds exist, with each round's raw marks attached. */
-async function scoredStudentsFor(eventId: string, performanceId: string): Promise<ScoredStudent[]> {
+/**
+ * One row per student for the given event+performance, with each round's raw
+ * marks attached. By default averages whatever rounds exist - used by Top
+ * Eight and Performance Two, where a multi-round event's two attempts both
+ * count. Pass `onlyRoundOne: true` to consider round 1 exclusively - used by
+ * Team Performance and All Rounders, where a round 2 submission has no
+ * effect on the score.
+ */
+async function scoredStudentsFor(
+  eventId: string,
+  performanceId: string,
+  options?: { onlyRoundOne?: boolean }
+): Promise<ScoredStudent[]> {
   const entries = await prisma.markEntry.findMany({
-    where: { eventId, performanceId },
+    where: { eventId, performanceId, ...(options?.onlyRoundOne ? { round: 1 } : {}) },
     include: { student: true },
   });
 
@@ -164,7 +175,7 @@ export async function getTeamPerformanceResults(eventId: string): Promise<TeamPe
   const performance = await getPerformanceOne();
   const [event, students] = await Promise.all([
     requireEvent(eventId),
-    scoredStudentsFor(eventId, performance.id),
+    scoredStudentsFor(eventId, performance.id, { onlyRoundOne: true }),
   ]);
 
   const eligible = students.filter((s) => s.team !== null);
@@ -367,11 +378,12 @@ export async function getAllRounderResults(filters?: {
   const performanceNameById = new Map(performances.map((p) => [p.id, p.name]));
   const performanceIdFor = (event: (typeof events)[number]) => event.defaultPerformanceId ?? performanceOne.id;
 
+  // Round 1 only - All Rounders is a "round 1 exclusively" view, same as
+  // Team Performance and Performance Two (only Top Eight averages rounds).
   const eventIds = events.map((e) => e.id);
   const marks = eventIds.length
-    ? await prisma.markEntry.findMany({ where: { eventId: { in: eventIds } } })
+    ? await prisma.markEntry.findMany({ where: { eventId: { in: eventIds }, round: 1 } })
     : [];
-  // One or two rounds can share this key - collect all of them, then average.
   const marksByKey = new Map<string, typeof marks>();
   for (const mark of marks) {
     const key = `${mark.studentId}|${mark.eventId}|${mark.performanceId}`;
