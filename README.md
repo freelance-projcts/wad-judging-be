@@ -47,13 +47,14 @@ npm run db:migrate
 npm run db:seed
 ```
 
-The seed creates:
+The seed creates only the minimum needed to sign in and start managing the
+competition from a clean slate:
 
 - Admin: `admin@wadjudging.test` / `Admin@12345`
-- Judge (assigned to both seeded performances): `judge@wadjudging.test` / `Judge@12345`
 - Performances: "Performance 1", "Performance 2"
-- Events: Floor Exercises, Rings, Pommel Horse (Male), Vault Table, Uneven Bars (Female)
-- 24 sample students split across provinces, genders, and Team A/B
+
+Judges, events, students, teams, and marks are all created through the app
+itself (or the API) from there - nothing else is pre-populated.
 
 ### 4. Run the app
 

@@ -11,5 +11,13 @@
   # NODE_ENV itself; nothing here should ever need to override that.
   NPM_CONFIG_PRODUCTION = "false"
 
+  # These are plain config values (storage driver name, local dev paths,
+  # node env mode), not secrets - but their values are common short strings
+  # that legitimately appear throughout README/docs/.env.example, which trips
+  # Netlify's secret scanner as a false positive. Omit them from scanning.
+  # Real secrets (JWT_SECRET, DATABASE_URL, S3_SECRET_ACCESS_KEY, etc.) stay
+  # scanned. See https://ntl.fyi/configure-secrets-scanning
+  SECRETS_SCAN_OMIT_KEYS = "STORAGE_DRIVER,LOCAL_UPLOAD_DIR,LOCAL_UPLOAD_PUBLIC_PATH,NODE_ENV"
+
 [[plugins]]
   package = "@netlify/plugin-nextjs"
