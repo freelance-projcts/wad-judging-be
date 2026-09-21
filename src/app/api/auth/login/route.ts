@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { verifyPassword, signSession, sessionCookieOptions } from "@/lib/auth";
+import { verifyPassword, signSession, sessionCookieOptions, SESSION_MAX_AGE_SECONDS } from "@/lib/auth";
 import { loginSchema } from "@/lib/validators";
 import { apiErrorResponse, ApiError, parseBody } from "@/lib/api-auth";
-
-const SEVEN_DAYS = 60 * 60 * 24 * 7;
 
 export async function POST(req: NextRequest) {
   try {
@@ -37,7 +35,7 @@ export async function POST(req: NextRequest) {
       },
       token,
     });
-    res.cookies.set({ ...sessionCookieOptions(SEVEN_DAYS), value: token });
+    res.cookies.set({ ...sessionCookieOptions(SESSION_MAX_AGE_SECONDS), value: token });
     return res;
   } catch (err) {
     return apiErrorResponse(err);

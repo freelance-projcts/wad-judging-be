@@ -6,7 +6,10 @@ import type { Role } from "@prisma/client";
 
 const SESSION_COOKIE = "wad_session";
 const JWT_SECRET = process.env.JWT_SECRET ?? "dev-secret-change-me";
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN ?? "7d";
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN ?? "4h";
+
+/** Session/cookie lifetime in seconds - kept in sync with JWT_EXPIRES_IN above. */
+export const SESSION_MAX_AGE_SECONDS = 60 * 60 * parseInt(JWT_EXPIRES_IN);
 
 function secretKey() {
   return new TextEncoder().encode(JWT_SECRET);
