@@ -10,7 +10,6 @@ import { getAllRounderResults } from "@/lib/result-service";
  */
 export async function GET(req: NextRequest) {
   try {
-    await requireAdmin();
     const { searchParams } = new URL(req.url);
     const gender = normalizeEnumParam(searchParams.get("gender"), genders);
     const province = normalizeEnumParam(searchParams.get("province"), provinces);
