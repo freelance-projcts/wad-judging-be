@@ -13,7 +13,10 @@ function allowedOrigins(): string[] {
   if (!fromEnv) return DEFAULT_ALLOWED_ORIGINS;
   return fromEnv
     .split(",")
-    .map((o) => o.trim())
+    // Strip whitespace and any accidental surrounding quotes - dashboard env
+    // var UIs (Netlify, etc.) store the raw string with no dotenv parsing, so
+    // pasting a .env-style `"a,b"` value literally keeps the quote characters.
+    .map((o) => o.trim().replace(/^["']|["']$/g, "").trim())
     .filter(Boolean);
 }
 
