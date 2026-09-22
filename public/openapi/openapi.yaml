@@ -28,6 +28,16 @@ components:
       type: apiKey
       in: cookie
       name: wad_session
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        The same session token returned in the `token` field of
+        POST /auth/login or /auth/register - send it as
+        `Authorization: Bearer <token>` for clients that can't rely on
+        cookies (curl, Postman, mobile). Either this or the session cookie
+        satisfies auth on every endpoint.
   schemas:
     Error:
       type: object
@@ -60,6 +70,9 @@ components:
         id: { type: string }
         name: { type: string }
         gender: { type: string, enum: [MALE, FEMALE, OTHER] }
+        status: { type: string, enum: [OPEN, PERFORMANCE_1_COMPLETE, PERFORMANCE_2_COMPLETE], default: OPEN }
+        defaultPerformanceId: { type: string, nullable: true }
+        supportsMultipleRounds: { type: boolean }
     Performance:
       type: object
       properties:
@@ -75,11 +88,17 @@ components:
         performanceId: { type: string }
         round: { type: integer, description: "1, or 2 if the event's supportsMultipleRounds is true" }
         dScore: { type: string }
+        dSupervisor: { type: string, nullable: true }
         e1Score: { type: string }
+        e1Supervisor: { type: string, nullable: true }
         e2Score: { type: string }
+        e2Supervisor: { type: string, nullable: true }
         e3Score: { type: string }
+        e3Supervisor: { type: string, nullable: true }
         e4Score: { type: string }
+        e4Supervisor: { type: string, nullable: true }
         penaltyScore: { type: string }
+        penaltySupervisor: { type: string, nullable: true }
         finalScore: { type: string }
         scoreBreakdown:
           type: object
@@ -92,15 +111,21 @@ components:
             finalScore: { type: number }
     RoundMark:
       type: object
-      description: The raw judge marks for a single round, plus that round's own final score.
+      description: The raw judge marks for a single round (each with its supervisor), plus that round's own final score.
       properties:
         round: { type: integer }
         d: { type: number }
+        dSupervisor: { type: string, nullable: true }
         e1: { type: number }
+        e1Supervisor: { type: string, nullable: true }
         e2: { type: number }
+        e2Supervisor: { type: string, nullable: true }
         e3: { type: number }
+        e3Supervisor: { type: string, nullable: true }
         e4: { type: number }
+        e4Supervisor: { type: string, nullable: true }
         p: { type: number }
+        pSupervisor: { type: string, nullable: true }
         finalScore: { type: number }
     EditRequest:
       type: object
@@ -113,6 +138,7 @@ components:
 
 security:
   - cookieAuth: []
+  - bearerAuth: []
 
 paths:
   /dashboard:
@@ -408,6 +434,28 @@ paths:
       responses:
         "200": { description: Deleted }
 
+  /events/{id}/status:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string }
+    put:
+      tags: [Events]
+      summary: Change an event's status (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [OPEN, PERFORMANCE_1_COMPLETE, PERFORMANCE_2_COMPLETE] }
+      responses:
+        "200": { description: Status updated }
+        "404": { description: Event not found }
+
   /judges:
     get:
       tags: [Judges]
@@ -500,14 +548,20 @@ paths:
                 round: { type: integer, minimum: 1, maximum: 2, default: 1 }
                 scores:
                   type: object
-                  required: [D, E1, E2, E3, E4]
+                  required: [D, DSupervisor, E1, E1Supervisor, E2, E2Supervisor, E3, E3Supervisor, E4, E4Supervisor]
                   properties:
                     D: { type: number }
+                    DSupervisor: { type: string }
                     E1: { type: number }
+                    E1Supervisor: { type: string }
                     E2: { type: number }
+                    E2Supervisor: { type: string }
                     E3: { type: number }
+                    E3Supervisor: { type: string }
                     E4: { type: number }
+                    E4Supervisor: { type: string }
                     P: { type: number, default: 0 }
+                    PSupervisor: { type: string }
       responses:
         "201": { description: Mark saved }
         "400": { description: round 2 requested but this event does not support multiple rounds }
@@ -533,14 +587,20 @@ paths:
           application/json:
             schema:
               type: object
-              required: [D, E1, E2, E3, E4]
+              required: [D, DSupervisor, E1, E1Supervisor, E2, E2Supervisor, E3, E3Supervisor, E4, E4Supervisor]
               properties:
                 D: { type: number }
+                DSupervisor: { type: string }
                 E1: { type: number }
+                E1Supervisor: { type: string }
                 E2: { type: number }
+                E2Supervisor: { type: string }
                 E3: { type: number }
+                E3Supervisor: { type: string }
                 E4: { type: number }
+                E4Supervisor: { type: string }
                 P: { type: number, default: 0 }
+                PSupervisor: { type: string }
       responses:
         "200": { description: Mark updated }
         "403": { description: Editing requires an approved edit request }

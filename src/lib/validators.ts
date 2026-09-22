@@ -90,14 +90,27 @@ export const eventSchema = z.object({
   supportsMultipleRounds: z.boolean().optional(),
 });
 
-/** D/E1-E4/P are each judge's own mark - no separate "supervisor" field per score. */
+export const eventStatuses = ["OPEN", "PERFORMANCE_1_COMPLETE", "PERFORMANCE_2_COMPLETE"] as const;
+
+/** Body for the dedicated PUT /api/events/:id/status endpoint - kept separate from eventSchema. */
+export const eventStatusSchema = z.object({
+  status: z.enum(eventStatuses),
+});
+
+/** D/E1-E4/P are each judge's own mark, each recorded alongside the supervisor who oversaw it. */
 export const markScoresSchema = z.object({
   D: z.number().min(0).max(10),
+  DSupervisor: z.string().trim().min(1).max(100),
   E1: z.number().min(0).max(10),
+  E1Supervisor: z.string().trim().min(1).max(100),
   E2: z.number().min(0).max(10),
+  E2Supervisor: z.string().trim().min(1).max(100),
   E3: z.number().min(0).max(10),
+  E3Supervisor: z.string().trim().min(1).max(100),
   E4: z.number().min(0).max(10),
+  E4Supervisor: z.string().trim().min(1).max(100),
   P: z.number().min(0).max(10).default(0),
+  PSupervisor: z.string().trim().max(100).optional(),
 });
 
 export const markEntrySchema = z.object({

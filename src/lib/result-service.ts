@@ -7,15 +7,21 @@ import type { Gender, Province, Team } from "@prisma/client";
 
 type TeamValue = "A" | "B";
 
-/** Raw judge marks for a single round - D/E1-E4/P as entered, plus that round's own final score. */
+/** Raw judge marks for a single round - D/E1-E4/P as entered (each with its supervisor), plus that round's own final score. */
 export interface RoundMark {
   round: number;
   d: number;
+  dSupervisor: string | null;
   e1: number;
+  e1Supervisor: string | null;
   e2: number;
+  e2Supervisor: string | null;
   e3: number;
+  e3Supervisor: string | null;
   e4: number;
+  e4Supervisor: string | null;
   p: number;
+  pSupervisor: string | null;
   finalScore: number;
 }
 
@@ -38,24 +44,36 @@ async function requireEvent(eventId: string) {
 interface DecimalScoreFields {
   round: number;
   dScore: unknown;
+  dSupervisor: string | null;
   e1Score: unknown;
+  e1Supervisor: string | null;
   e2Score: unknown;
+  e2Supervisor: string | null;
   e3Score: unknown;
+  e3Supervisor: string | null;
   e4Score: unknown;
+  e4Supervisor: string | null;
   penaltyScore: unknown;
+  penaltySupervisor: string | null;
 }
 
-/** The raw per-judge D/E1-E4/P values for one round, plus that round's own final score. */
+/** The raw per-judge D/E1-E4/P values (each with its supervisor) for one round, plus that round's own final score. */
 function toRoundMark(entry: DecimalScoreFields): RoundMark {
   const breakdown = toScoreBreakdown(entry as Parameters<typeof toScoreBreakdown>[0]);
   return {
     round: entry.round,
     d: Number(entry.dScore),
+    dSupervisor: entry.dSupervisor,
     e1: Number(entry.e1Score),
+    e1Supervisor: entry.e1Supervisor,
     e2: Number(entry.e2Score),
+    e2Supervisor: entry.e2Supervisor,
     e3: Number(entry.e3Score),
+    e3Supervisor: entry.e3Supervisor,
     e4: Number(entry.e4Score),
+    e4Supervisor: entry.e4Supervisor,
     p: Number(entry.penaltyScore),
+    pSupervisor: entry.penaltySupervisor,
     finalScore: breakdown.finalScore,
   };
 }

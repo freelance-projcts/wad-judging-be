@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import type { ZodSchema } from "zod";
 import { getSession, SessionPayload } from "./auth";
-import { prisma } from "./prisma";
 
 export class ApiError extends Error {
   status: number;
@@ -57,23 +56,15 @@ export async function requireJudge(): Promise<SessionPayload> {
 }
 
 /**
- * Require that the current session is a JUDGE explicitly assigned to the given
- * performance (server-side enforcement of JUDGE -> PERFORMANCE_N scoping).
- * ADMIN is always allowed through (admins can see/act on all performances).
+ * Any authenticated user (admin or judge) may access any performance's data -
+ * the JUDGE -> PERFORMANCE_N assignment scoping this used to enforce has been
+ * removed. Kept as a named checkpoint so call sites don't need to change if
+ * scoping is reintroduced later.
  */
 export async function requirePerformanceAccess(
-  performanceId: string
+  _performanceId: string
 ): Promise<SessionPayload> {
-  const session = await requireSession();
-  if (session.role === "ADMIN") return session;
-
-  const assignment = await prisma.judgeAssignment.findUnique({
-    where: { judgeId_performanceId: { judgeId: session.sub, performanceId } },
-  });
-  // if (!assignment) {
-  //   throw new ApiError(403, "You are not assigned to this performance");
-  // }
-  return session;
+  return requireSession();
 }
 
 /** Parse a request body against a Zod schema, throwing a 400 ApiError with a readable message on failure. */

@@ -47,6 +47,12 @@ enum NotificationType {
   EDIT_REQUEST
 }
 
+enum EventStatus {
+  OPEN
+  PERFORMANCE_1_COMPLETE
+  PERFORMANCE_2_COMPLETE
+}
+
 model User {
   id           String   @id @default(cuid())
   name         String
@@ -108,19 +114,21 @@ model JudgeAssignment {
 }
 
 model Event {
-  id                     String   @id @default(cuid())
+  id                     String      @id @default(cuid())
   name                   String
   gender                 Gender
+  status                 EventStatus @default(OPEN)
   defaultPerformanceId   String?
-  supportsMultipleRounds Boolean  @default(false)
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
+  supportsMultipleRounds Boolean     @default(false)
+  createdAt              DateTime    @default(now())
+  updatedAt              DateTime    @updatedAt
 
   markEntries        MarkEntry[]
   defaultPerformance Performance? @relation("EventDefaultPerformance", fields: [defaultPerformanceId], references: [id], onDelete: SetNull)
 
   @@unique([name, gender])
   @@index([defaultPerformanceId])
+  @@index([status])
   @@map("events")
 }
 
@@ -151,13 +159,19 @@ model MarkEntry {
   round         Int    @default(1)
   judgeId       String
 
-  dScore       Decimal @db.Decimal(10, 3)
-  e1Score      Decimal @db.Decimal(10, 3)
-  e2Score      Decimal @db.Decimal(10, 3)
-  e3Score      Decimal @db.Decimal(10, 3)
-  e4Score      Decimal @db.Decimal(10, 3)
-  penaltyScore Decimal @default(0) @db.Decimal(10, 3)
-  finalScore   Decimal @db.Decimal(10, 3)
+  dScore            Decimal @db.Decimal(10, 3)
+  dSupervisor       String?
+  e1Score           Decimal @db.Decimal(10, 3)
+  e1Supervisor      String?
+  e2Score           Decimal @db.Decimal(10, 3)
+  e2Supervisor      String?
+  e3Score           Decimal @db.Decimal(10, 3)
+  e3Supervisor      String?
+  e4Score           Decimal @db.Decimal(10, 3)
+  e4Supervisor      String?
+  penaltyScore      Decimal @default(0) @db.Decimal(10, 3)
+  penaltySupervisor String?
+  finalScore        Decimal @db.Decimal(10, 3)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

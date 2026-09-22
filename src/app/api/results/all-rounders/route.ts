@@ -1,15 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAdmin, apiErrorResponse } from "@/lib/api-auth";
+import { requireSession, apiErrorResponse } from "@/lib/api-auth";
 import { genders, provinces, teams, normalizeEnumParam } from "@/lib/validators";
 import { getAllRounderResults } from "@/lib/result-service";
 
-/**
- * All Rounders spans both performances (each event uses its own configured
- * performance), so it's scoped to admins rather than a single performance's
- * assigned judges.
- */
+/** All Rounders spans both performances (each event uses its own configured performance). */
 export async function GET(req: NextRequest) {
   try {
+    await requireSession();
     const { searchParams } = new URL(req.url);
     const gender = normalizeEnumParam(searchParams.get("gender"), genders);
     const province = normalizeEnumParam(searchParams.get("province"), provinces);

@@ -6,11 +6,17 @@ import type { MarkEntry, Prisma } from "@prisma/client";
 
 export interface MarkScoresInput {
   D: number;
+  DSupervisor: string;
   E1: number;
+  E1Supervisor: string;
   E2: number;
+  E2Supervisor: string;
   E3: number;
+  E3Supervisor: string;
   E4: number;
+  E4Supervisor: string;
   P: number;
+  PSupervisor?: string;
 }
 
 function toPayload(scores: MarkScoresInput) {
@@ -24,11 +30,17 @@ function toPayload(scores: MarkScoresInput) {
   });
   return {
     dScore: scores.D,
+    dSupervisor: scores.DSupervisor,
     e1Score: scores.E1,
+    e1Supervisor: scores.E1Supervisor,
     e2Score: scores.E2,
+    e2Supervisor: scores.E2Supervisor,
     e3Score: scores.E3,
+    e3Supervisor: scores.E3Supervisor,
     e4Score: scores.E4,
+    e4Supervisor: scores.E4Supervisor,
     penaltyScore: scores.P,
+    penaltySupervisor: scores.PSupervisor ?? null,
     finalScore,
   };
 }

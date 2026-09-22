@@ -7,14 +7,10 @@ import { upsertMarkEntry } from "@/lib/mark-service";
 import { notifyAdmins } from "@/lib/notifications";
 import type { Prisma } from "@prisma/client";
 
-/**
- * List mark entries. Filters are all optional; if performanceId is omitted a
- * judge is scoped to their own assigned performance(s), while an admin sees
- * everything - this mirrors the students/events list endpoints' pattern.
- */
+/** List mark entries. Filters are all optional; any authenticated user may query any performance. */
 export async function GET(req: NextRequest) {
   try {
-    const session = await requireSession();
+    await requireSession();
     const { searchParams } = new URL(req.url);
     const performanceId = searchParams.get("performanceId");
     const eventId = searchParams.get("eventId");
@@ -29,17 +25,7 @@ export async function GET(req: NextRequest) {
 
     const where: Prisma.MarkEntryWhereInput = {};
 
-    if (performanceId) {
-      await requirePerformanceAccess(performanceId);
-      where.performanceId = performanceId;
-    } else if (session.role !== "ADMIN") {
-      const assignments = await prisma.judgeAssignment.findMany({
-        where: { judgeId: session.sub },
-        select: { performanceId: true },
-      });
-      if (assignments.length === 0) return NextResponse.json({ marks: [] });
-      where.performanceId = { in: assignments.map((a) => a.performanceId) };
-    }
+    if (performanceId) where.performanceId = performanceId;
 
     if (eventId) where.eventId = eventId;
     if (studentId) where.studentId = studentId;
