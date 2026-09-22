@@ -11,7 +11,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const body = await req.json().catch(() => ({}));
     const data = parseBody(eventStatusSchema, body);
 
-    const event = await prisma.event.update({ where: { id }, data: { status: data.status } });
+    const event = await prisma.event.update({
+      where: { id },
+      data: { status: data.status } as any,
+    });
     return NextResponse.json({ event });
   } catch (err) {
     return apiErrorResponse(err);

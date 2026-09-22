@@ -10,6 +10,7 @@ servers:
   - url: /api
 tags:
   - name: Dashboard
+  - name: Admin
   - name: Auth
   - name: Students
   - name: Events
@@ -162,6 +163,26 @@ paths:
                       scoreChangeRequests: { type: integer }
         "403":
           description: Admin access required
+
+  /admins/reset-data:
+    post:
+      tags: [Admin]
+      summary: Reset the competition data to a clean slate (admin only, irreversible)
+      description: >
+        Truncates students, mark entries, edit requests, notifications, and
+        judge-performance assignments. Users, performances, and events are
+        kept - every event's status is reset to OPEN. There is no undo.
+      responses:
+        "200":
+          description: Reset complete
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  message: { type: string }
+        "403": { description: Admin access required }
 
   /auth/register:
     post:
