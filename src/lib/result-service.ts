@@ -213,7 +213,8 @@ export async function getTeamPerformanceResults(eventId: string): Promise<TeamPe
       ];
       return {
         team,
-        teamTotal: Math.round(top5.reduce((sum, s) => sum + s.finalScore, 0) * 1000) / 1000,
+        // A student's own negative score (e.g. a heavy penalty) must not pull the team total down.
+        teamTotal: Math.round(top5.reduce((sum, s) => sum + Math.max(0, s.finalScore), 0) * 1000) / 1000,
         countedStudentCount: top5.length,
         students: rows,
       };
@@ -435,7 +436,8 @@ export async function getAllRounderResults(filters?: {
       gender: student.gender,
       province: student.province,
       team: student.team as TeamValue | null,
-      totalScore: Math.round(scored.reduce((sum, e) => sum + (e.finalScore ?? 0), 0) * 1000) / 1000,
+      // A negative event score (e.g. a heavy penalty) must not pull the cross-event total down.
+      totalScore: Math.round(scored.reduce((sum, e) => sum + Math.max(0, e.finalScore ?? 0), 0) * 1000) / 1000,
       eventsScored: scored.length,
       events: eventBreakdowns,
     };
