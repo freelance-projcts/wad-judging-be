@@ -170,8 +170,9 @@ paths:
       summary: Reset the competition data to a clean slate (admin only, irreversible)
       description: >
         Truncates students, mark entries, edit requests, notifications, and
-        judge-performance assignments. Users, performances, and events are
-        kept - every event's status is reset to OPEN. There is no undo.
+        judge-performance assignments, and deletes all JUDGE-role users.
+        Admin users, performances, and events are kept - every event's status
+        is reset to OPEN. There is no undo.
       responses:
         "200":
           description: Reset complete
