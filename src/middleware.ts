@@ -6,7 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
  * frontend deployment doesn't require a code change; defaults cover local
  * dev and the deployed frontend.
  */
-const DEFAULT_ALLOWED_ORIGINS = ["http://localhost:3000", "https://wadjudgefe.netlify.app"];
+const DEFAULT_ALLOWED_ORIGINS = ["http://localhost:3000"];
 
 function allowedOrigins(): string[] {
   const fromEnv = process.env.CORS_ALLOWED_ORIGINS;
