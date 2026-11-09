@@ -790,10 +790,13 @@ paths:
   /results/team-performance:
     get:
       tags: [Results]
-      summary: Team Performance - Performance 1, event-specific, province/club -> Team A/B -> top 5 -> teamTotal
+      summary: Team Performance - Performance 1, event-specific, province/club -> Team A/B -> teamTotal
       description: >
         Grouped by province (default) or club, per X-Grouping-Mode. Exactly
         one of `provinces`/`clubs` is populated per `groupBy`; the other is [].
+        Province mode keeps a top-5-per-team cutoff for teamTotal (the rest
+        are shown with countedTowardTotal: false). Club mode has no cutoff -
+        every student in the club+team counts toward teamTotal.
       parameters:
         - in: query
           name: eventId
@@ -878,10 +881,14 @@ paths:
   /results/top-eight:
     get:
       tags: [Results]
-      summary: Top Eight - Performance 1, event-specific, ignores team, top 3 (plus ties) per province/club
+      summary: Top Eight - Performance 1, event-specific; top 3 (plus ties) per province, or flat top 10 (plus ties) for club
       description: >
-        Grouped by province (default) or club, per X-Grouping-Mode. Exactly
-        one of `provinces`/`clubs` is populated per `groupBy`; the other is [].
+        Province mode (default) buckets students per province and ranks the
+        top 3 (plus ties at the cutoff) within each bucket - see `provinces`.
+        Club mode does NOT bucket per club; it's a single flat ranking of the
+        top 10 (plus ties) across every club-assigned student - see the
+        top-level `students` array instead, with each row's own
+        clubId/clubName showing which club it's from.
       parameters:
         - in: query
           name: eventId
@@ -903,6 +910,7 @@ paths:
                   groupBy: { type: string, enum: [PROVINCE, CLUB] }
                   provinces:
                     type: array
+                    description: Top 3 (plus ties) per province - populated only when groupBy is PROVINCE.
                     items:
                       type: object
                       properties:
@@ -917,33 +925,30 @@ paths:
                               studentId: { type: string }
                               code: { type: string }
                               fullName: { type: string }
+                              clubId: { type: string, nullable: true }
+                              clubName: { type: string, nullable: true }
                               team: { type: string, nullable: true, enum: [A, B, null] }
                               finalScore: { type: number }
                               marks:
                                 type: array
                                 items: { $ref: "#/components/schemas/RoundMark" }
-                  clubs:
+                  students:
                     type: array
-                    description: Populated instead of `provinces` when groupBy is CLUB - same inner shape, keyed by clubId/clubName.
+                    description: Flat top 10 (plus ties) across all clubs - populated only when groupBy is CLUB.
                     items:
                       type: object
                       properties:
-                        clubId: { type: string }
-                        clubName: { type: string }
-                        students:
+                        rank: { type: integer }
+                        studentId: { type: string }
+                        code: { type: string }
+                        fullName: { type: string }
+                        clubId: { type: string, nullable: true }
+                        clubName: { type: string, nullable: true }
+                        team: { type: string, nullable: true, enum: [A, B, null] }
+                        finalScore: { type: number }
+                        marks:
                           type: array
-                          items:
-                            type: object
-                            properties:
-                              rank: { type: integer }
-                              studentId: { type: string }
-                              code: { type: string }
-                              fullName: { type: string }
-                              team: { type: string, nullable: true, enum: [A, B, null] }
-                              finalScore: { type: number }
-                              marks:
-                                type: array
-                                items: { $ref: "#/components/schemas/RoundMark" }
+                          items: { $ref: "#/components/schemas/RoundMark" }
         "400": { description: eventId is required }
         "403": { description: Not assigned to Performance 1 }
 

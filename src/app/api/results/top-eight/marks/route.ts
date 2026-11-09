@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
 
     const topEight = await getTopEightResults(eventId);
     const rankByStudentId = new Map(
-      [...topEight.provinces.flatMap((p) => p.students), ...topEight.clubs.flatMap((c) => c.students)].map(
+      [...topEight.provinces.flatMap((p) => p.students), ...topEight.students].map(
         (s) => [s.studentId, s.rank] as const
       )
     );

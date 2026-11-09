@@ -254,20 +254,23 @@ export async function getTeamPerformanceResults(eventId: string): Promise<TeamPe
   const eligible = students.filter((s) => s.team !== null);
   const buckets = buildScoredStudentBuckets(eligible, mode);
 
+  // Province mode keeps the top-5-per-team cutoff (teamTotal = top 5 only,
+  // the rest are shown but not counted). Club mode has no cutoff at all -
+  // every student in the club+team counts toward teamTotal.
   const buildTeamGroups = (bucketStudents: ScoredStudent[]): TeamPerformanceTeamGroup[] =>
     (["A", "B"] as const).map((team) => {
       const sorted = sortDescending(bucketStudents.filter((s) => s.team === team));
-      const top5 = sorted.slice(0, 5);
-      const rest = sorted.slice(5);
+      const counted = mode === "CLUB" ? sorted : sorted.slice(0, 5);
+      const rest = mode === "CLUB" ? [] : sorted.slice(5);
       const rows: TeamPerformanceStudentRow[] = [
-        ...top5.map((s, i) => ({ ...omitProvinceTeam(s), rank: i + 1, countedTowardTotal: true })),
+        ...counted.map((s, i) => ({ ...omitProvinceTeam(s), rank: i + 1, countedTowardTotal: true })),
         ...rest.map((s, i) => ({ ...omitProvinceTeam(s), rank: i + 6, countedTowardTotal: false })),
       ];
       return {
         team,
         // A student's own negative score (e.g. a heavy penalty) must not pull the team total down.
-        teamTotal: Math.round(top5.reduce((sum, s) => sum + Math.max(0, s.finalScore), 0) * 1000) / 1000,
-        countedStudentCount: top5.length,
+        teamTotal: Math.round(counted.reduce((sum, s) => sum + Math.max(0, s.finalScore), 0) * 1000) / 1000,
+        countedStudentCount: counted.length,
         students: rows,
       };
     });
@@ -302,6 +305,8 @@ export interface TopEightStudentRow {
   studentId: string;
   code: string;
   fullName: string;
+  clubId: string | null;
+  clubName: string | null;
   team: TeamValue | null;
   finalScore: number;
   marks: RoundMark[];
@@ -311,19 +316,34 @@ export interface TopEightProvinceGroup {
   provinceLabel: string;
   students: TopEightStudentRow[];
 }
-export interface TopEightClubGroup {
-  clubId: string;
-  clubName: string;
-  students: TopEightStudentRow[];
-}
 export interface TopEightResponse {
   eventId: string;
   eventName: string;
   performanceId: string;
   performanceName: string;
   groupBy: GroupingMode;
+  /** Top 3 (+ties) per province - populated only when groupBy is PROVINCE. */
   provinces: TopEightProvinceGroup[];
-  clubs: TopEightClubGroup[];
+  /**
+   * Flat top 10 (+ties) across every club-assigned student - populated only
+   * when groupBy is CLUB. Unlike province mode, club mode does not bucket
+   * per club first; it's one ranking across all clubs combined.
+   */
+  students: TopEightStudentRow[];
+}
+
+function toTopEightStudentRow(s: ScoredStudent & { rank: number }): TopEightStudentRow {
+  return {
+    rank: s.rank,
+    studentId: s.studentId,
+    code: s.code,
+    fullName: s.fullName,
+    clubId: s.clubId,
+    clubName: s.clubName,
+    team: s.team,
+    finalScore: s.finalScore,
+    marks: s.marks,
+  };
 }
 
 export async function getTopEightResults(eventId: string): Promise<TopEightResponse> {
@@ -334,37 +354,35 @@ export async function getTopEightResults(eventId: string): Promise<TopEightRespo
     getGroupingMode(),
   ]);
 
-  const buckets = buildScoredStudentBuckets(students, mode);
-
-  const buildStudentRows = (bucketStudents: ScoredStudent[]): TopEightStudentRow[] =>
-    assignRanks(topWithTies(sortDescending(bucketStudents), 3), (s) => s.finalScore).map((s) => ({
-      rank: s.rank,
-      studentId: s.studentId,
-      code: s.code,
-      fullName: s.fullName,
-      team: s.team,
-      finalScore: s.finalScore,
-      marks: s.marks,
-    }));
-
-  return {
+  const base = {
     eventId,
     eventName: event.name,
     performanceId: performance.id,
     performanceName: performance.name,
     groupBy: mode,
-    provinces:
-      mode === "PROVINCE"
-        ? buckets.map((b) => ({
-            province: b.id as Province,
-            provinceLabel: b.label,
-            students: buildStudentRows(b.students),
-          }))
-        : [],
-    clubs:
-      mode === "CLUB"
-        ? buckets.map((b) => ({ clubId: b.id, clubName: b.label, students: buildStudentRows(b.students) }))
-        : [],
+  };
+
+  if (mode === "CLUB") {
+    const clubStudents = students.filter((s) => s.clubId != null);
+    const top10WithTies = topWithTies(sortDescending(clubStudents), 10);
+    return {
+      ...base,
+      provinces: [],
+      students: assignRanks(top10WithTies, (s) => s.finalScore).map(toTopEightStudentRow),
+    };
+  }
+
+  const buckets = buildScoredStudentBuckets(students, mode);
+  return {
+    ...base,
+    provinces: buckets.map((b) => ({
+      province: b.id as Province,
+      provinceLabel: b.label,
+      students: assignRanks(topWithTies(sortDescending(b.students), 3), (s) => s.finalScore).map(
+        toTopEightStudentRow
+      ),
+    })),
+    students: [],
   };
 }
 
