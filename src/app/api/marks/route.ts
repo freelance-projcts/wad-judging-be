@@ -17,6 +17,7 @@ export async function GET(req: NextRequest) {
     const studentId = searchParams.get("studentId");
     const gender = normalizeEnumParam(searchParams.get("gender"), genders);
     const province = normalizeEnumParam(searchParams.get("province"), provinces);
+    const clubId = searchParams.get("clubId")?.trim() || undefined;
     const team = normalizeEnumParam(searchParams.get("team"), teams);
 
     if (gender.invalid || province.invalid || team.invalid) {
@@ -29,10 +30,11 @@ export async function GET(req: NextRequest) {
 
     if (eventId) where.eventId = eventId;
     if (studentId) where.studentId = studentId;
-    if (gender.value || province.value || team.value) {
+    if (gender.value || province.value || clubId || team.value) {
       where.student = {
         ...(gender.value ? { gender: gender.value } : {}),
         ...(province.value ? { province: province.value } : {}),
+        ...(clubId ? { clubId } : {}),
         ...(team.value ? { team: team.value } : {}),
       };
     }

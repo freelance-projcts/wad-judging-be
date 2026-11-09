@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAdmin, requireSession, apiErrorResponse, parseBody } from "@/lib/api-auth";
+import { requireAdmin, requireSession, apiErrorResponse, parseBody, ApiError } from "@/lib/api-auth";
 import { studentSchema, genders, provinces, teams, normalizeEnumParam } from "@/lib/validators";
-import type { Prisma } from "@prisma/client";
+import { getGroupingMode } from "@/lib/grouping";
+import type { Prisma, Province } from "@prisma/client";
 
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 100;
@@ -26,6 +27,7 @@ export async function GET(req: NextRequest) {
     const q = (searchParams.get("q") ?? searchParams.get("search"))?.trim();
     const gender = normalizeEnumParam(searchParams.get("gender"), genders);
     const province = normalizeEnumParam(searchParams.get("province"), provinces);
+    const clubId = searchParams.get("clubId")?.trim() || undefined;
     const team = normalizeEnumParam(searchParams.get("team"), teams);
     const page = parsePositiveInt(searchParams.get("page"), 1);
     const pageSize = parsePositiveInt(searchParams.get("pageSize"), DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
@@ -46,6 +48,7 @@ export async function GET(req: NextRequest) {
     }
     if (gender.value) where.gender = gender.value;
     if (province.value) where.province = province.value;
+    if (clubId) where.clubId = clubId;
     if (team.value) where.team = team.value;
 
     const [items, total] = await prisma.$transaction([
@@ -76,12 +79,27 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const data = parseBody(studentSchema, body);
 
+    const mode = await getGroupingMode();
+    let province: Province | null = data.province ?? null;
+    let clubId: string | null = data.clubId ?? null;
+
+    if (mode === "PROVINCE") {
+      if (!province) throw new ApiError(400, "province is required");
+      clubId = null;
+    } else {
+      if (!clubId) throw new ApiError(400, "clubId is required");
+      const club = await prisma.club.findUnique({ where: { id: clubId } });
+      if (!club) throw new ApiError(404, "Club not found");
+      province = null;
+    }
+
     const student = await prisma.student.create({
       data: {
         code: data.code,
         fullName: data.fullName,
         gender: data.gender,
-        province: data.province,
+        province,
+        clubId,
         photoUrl: data.photoUrl ?? null,
         team: data.team ?? null,
       },

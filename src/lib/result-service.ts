@@ -3,6 +3,7 @@ import { toScoreBreakdown } from "@/lib/scoring";
 import { getPerformanceOne, getPerformanceTwo } from "@/lib/performances";
 import { provinces, provinceLabels } from "@/lib/validators";
 import { ApiError } from "@/lib/api-auth";
+import { getGroupingMode, type GroupingMode } from "@/lib/grouping";
 import type { Gender, Province, Team } from "@prisma/client";
 
 type TeamValue = "A" | "B";
@@ -29,7 +30,9 @@ interface ScoredStudent {
   studentId: string;
   code: string;
   fullName: string;
-  province: Province;
+  province: Province | null;
+  clubId: string | null;
+  clubName: string | null;
   team: TeamValue | null;
   finalScore: number;
   marks: RoundMark[];
@@ -111,7 +114,7 @@ async function scoredStudentsFor(
 ): Promise<ScoredStudent[]> {
   const entries = await prisma.markEntry.findMany({
     where: { eventId, performanceId, ...(options?.onlyRoundOne ? { round: 1 } : {}) },
-    include: { student: true },
+    include: { student: { include: { club: true } } },
   });
 
   const byStudent = new Map<string, { student: (typeof entries)[number]["student"]; rounds: typeof entries }>();
@@ -126,6 +129,8 @@ async function scoredStudentsFor(
     code: student.code,
     fullName: student.fullName,
     province: student.province,
+    clubId: student.clubId,
+    clubName: student.club?.name ?? null,
     team: student.team as TeamValue | null,
     finalScore: averageFinalScore(rounds),
     marks: toRoundMarks(rounds),
@@ -153,6 +158,48 @@ function assignRanks<T>(sorted: T[], scoreOf: (row: T) => number): (T & { rank: 
   return ranked;
 }
 
+interface ScoredStudentBucket {
+  id: string;
+  label: string;
+  students: ScoredStudent[];
+}
+
+/**
+ * Bucket an already-scored student list by province (fixed enum order,
+ * skipping empty buckets) or by club (the distinct clubIds actually present
+ * among these students, sorted by name), depending on the grouping mode.
+ * Shared by getTeamPerformanceResults and getTopEightResults so the
+ * top-5-per-team / top-3-with-ties logic that runs over each bucket is
+ * written exactly once. Club names come straight off each ScoredStudent
+ * (already joined in scoredStudentsFor), no second query needed.
+ */
+function buildScoredStudentBuckets(students: ScoredStudent[], mode: GroupingMode): ScoredStudentBucket[] {
+  if (mode === "CLUB") {
+    const byClubId = new Map<string, ScoredStudent[]>();
+    for (const s of students) {
+      if (!s.clubId) continue;
+      const group = byClubId.get(s.clubId) ?? [];
+      group.push(s);
+      byClubId.set(s.clubId, group);
+    }
+    return [...byClubId.entries()]
+      .map(([clubId, clubStudents]) => ({
+        id: clubId,
+        label: clubStudents[0].clubName ?? "Unknown Club",
+        students: clubStudents,
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }
+
+  return provinces
+    .map((province) => ({
+      id: province,
+      label: provinceLabels[province],
+      students: students.filter((s) => s.province === province),
+    }))
+    .filter((bucket) => bucket.students.length > 0);
+}
+
 // ---------------------------------------------------------------------------
 // Team Performance - Performance 1 only, event-specific, province -> team -> top 5
 // ---------------------------------------------------------------------------
@@ -177,12 +224,19 @@ export interface TeamPerformanceProvinceGroup {
   provinceLabel: string;
   teams: TeamPerformanceTeamGroup[];
 }
+export interface TeamPerformanceClubGroup {
+  clubId: string;
+  clubName: string;
+  teams: TeamPerformanceTeamGroup[];
+}
 export interface TeamPerformanceResponse {
   eventId: string;
   eventName: string;
   performanceId: string;
   performanceName: string;
+  groupBy: GroupingMode;
   provinces: TeamPerformanceProvinceGroup[];
+  clubs: TeamPerformanceClubGroup[];
 }
 
 function omitProvinceTeam(s: ScoredStudent) {
@@ -191,20 +245,18 @@ function omitProvinceTeam(s: ScoredStudent) {
 
 export async function getTeamPerformanceResults(eventId: string): Promise<TeamPerformanceResponse> {
   const performance = await getPerformanceOne();
-  const [event, students] = await Promise.all([
+  const [event, students, mode] = await Promise.all([
     requireEvent(eventId),
     scoredStudentsFor(eventId, performance.id, { onlyRoundOne: true }),
+    getGroupingMode(),
   ]);
 
   const eligible = students.filter((s) => s.team !== null);
-  const provinceGroups: TeamPerformanceProvinceGroup[] = [];
+  const buckets = buildScoredStudentBuckets(eligible, mode);
 
-  for (const province of provinces) {
-    const inProvince = eligible.filter((s) => s.province === province);
-    if (inProvince.length === 0) continue;
-
-    const teamGroups: TeamPerformanceTeamGroup[] = (["A", "B"] as const).map((team) => {
-      const sorted = sortDescending(inProvince.filter((s) => s.team === team));
+  const buildTeamGroups = (bucketStudents: ScoredStudent[]): TeamPerformanceTeamGroup[] =>
+    (["A", "B"] as const).map((team) => {
+      const sorted = sortDescending(bucketStudents.filter((s) => s.team === team));
       const top5 = sorted.slice(0, 5);
       const rest = sorted.slice(5);
       const rows: TeamPerformanceStudentRow[] = [
@@ -220,15 +272,24 @@ export async function getTeamPerformanceResults(eventId: string): Promise<TeamPe
       };
     });
 
-    provinceGroups.push({ province, provinceLabel: provinceLabels[province], teams: teamGroups });
-  }
-
   return {
     eventId,
     eventName: event.name,
     performanceId: performance.id,
     performanceName: performance.name,
-    provinces: provinceGroups,
+    groupBy: mode,
+    provinces:
+      mode === "PROVINCE"
+        ? buckets.map((b) => ({
+            province: b.id as Province,
+            provinceLabel: b.label,
+            teams: buildTeamGroups(b.students),
+          }))
+        : [],
+    clubs:
+      mode === "CLUB"
+        ? buckets.map((b) => ({ clubId: b.id, clubName: b.label, teams: buildTeamGroups(b.students) }))
+        : [],
   };
 }
 
@@ -250,48 +311,60 @@ export interface TopEightProvinceGroup {
   provinceLabel: string;
   students: TopEightStudentRow[];
 }
+export interface TopEightClubGroup {
+  clubId: string;
+  clubName: string;
+  students: TopEightStudentRow[];
+}
 export interface TopEightResponse {
   eventId: string;
   eventName: string;
   performanceId: string;
   performanceName: string;
+  groupBy: GroupingMode;
   provinces: TopEightProvinceGroup[];
+  clubs: TopEightClubGroup[];
 }
 
 export async function getTopEightResults(eventId: string): Promise<TopEightResponse> {
   const performance = await getPerformanceOne();
-  const [event, students] = await Promise.all([
+  const [event, students, mode] = await Promise.all([
     requireEvent(eventId),
     scoredStudentsFor(eventId, performance.id),
+    getGroupingMode(),
   ]);
 
-  const provinceGroups: TopEightProvinceGroup[] = [];
-  for (const province of provinces) {
-    const inProvince = students.filter((s) => s.province === province);
-    if (inProvince.length === 0) continue;
+  const buckets = buildScoredStudentBuckets(students, mode);
 
-    const top3WithTies = topWithTies(sortDescending(inProvince), 3);
-    provinceGroups.push({
-      province,
-      provinceLabel: provinceLabels[province],
-      students: assignRanks(top3WithTies, (s) => s.finalScore).map((s) => ({
-        rank: s.rank,
-        studentId: s.studentId,
-        code: s.code,
-        fullName: s.fullName,
-        team: s.team,
-        finalScore: s.finalScore,
-        marks: s.marks,
-      })),
-    });
-  }
+  const buildStudentRows = (bucketStudents: ScoredStudent[]): TopEightStudentRow[] =>
+    assignRanks(topWithTies(sortDescending(bucketStudents), 3), (s) => s.finalScore).map((s) => ({
+      rank: s.rank,
+      studentId: s.studentId,
+      code: s.code,
+      fullName: s.fullName,
+      team: s.team,
+      finalScore: s.finalScore,
+      marks: s.marks,
+    }));
 
   return {
     eventId,
     eventName: event.name,
     performanceId: performance.id,
     performanceName: performance.name,
-    provinces: provinceGroups,
+    groupBy: mode,
+    provinces:
+      mode === "PROVINCE"
+        ? buckets.map((b) => ({
+            province: b.id as Province,
+            provinceLabel: b.label,
+            students: buildStudentRows(b.students),
+          }))
+        : [],
+    clubs:
+      mode === "CLUB"
+        ? buckets.map((b) => ({ clubId: b.id, clubName: b.label, students: buildStudentRows(b.students) }))
+        : [],
   };
 }
 
@@ -304,8 +377,10 @@ export interface PerformanceTwoStudentRow {
   studentId: string;
   code: string;
   fullName: string;
-  province: Province;
-  provinceLabel: string;
+  province: Province | null;
+  provinceLabel: string | null;
+  clubId: string | null;
+  clubName: string | null;
   team: TeamValue | null;
   finalScore: number;
   marks: RoundMark[];
@@ -338,7 +413,9 @@ export async function getPerformanceTwoResults(eventId: string): Promise<Perform
       code: s.code,
       fullName: s.fullName,
       province: s.province,
-      provinceLabel: provinceLabels[s.province],
+      provinceLabel: s.province ? provinceLabels[s.province] : null,
+      clubId: s.clubId,
+      clubName: s.clubName,
       team: s.team,
       finalScore: s.finalScore,
       marks: s.marks,
@@ -365,7 +442,10 @@ export interface AllRounderStudentRow {
   code: string;
   fullName: string;
   gender: Gender;
-  province: Province;
+  province: Province | null;
+  provinceLabel: string | null;
+  clubId: string | null;
+  clubName: string | null;
   team: TeamValue | null;
   totalScore: number;
   eventsScored: number;
@@ -379,6 +459,7 @@ export interface AllRounderResponse {
 export async function getAllRounderResults(filters?: {
   gender?: Gender;
   province?: Province;
+  clubId?: string;
   team?: TeamValue;
 }): Promise<AllRounderResponse> {
   const performanceOne = await getPerformanceOne();
@@ -388,8 +469,10 @@ export async function getAllRounderResults(filters?: {
       where: {
         ...(filters?.gender ? { gender: filters.gender } : {}),
         ...(filters?.province ? { province: filters.province } : {}),
+        ...(filters?.clubId ? { clubId: filters.clubId } : {}),
         ...(filters?.team ? { team: filters.team as Team } : {}),
       },
+      include: { club: true },
     }),
     prisma.event.findMany(),
     prisma.performance.findMany(),
@@ -435,6 +518,9 @@ export async function getAllRounderResults(filters?: {
       fullName: student.fullName,
       gender: student.gender,
       province: student.province,
+      provinceLabel: student.province ? provinceLabels[student.province] : null,
+      clubId: student.clubId,
+      clubName: student.club?.name ?? null,
       team: student.team as TeamValue | null,
       // A negative event score (e.g. a heavy penalty) must not pull the cross-event total down.
       totalScore: Math.round(scored.reduce((sum, e) => sum + Math.max(0, e.finalScore ?? 0), 0) * 1000) / 1000,
@@ -465,7 +551,7 @@ export async function getAllRounderResults(filters?: {
 export async function getMarksForExport(performanceId: string, gender: Gender, eventId?: string) {
   return prisma.markEntry.findMany({
     where: { performanceId, student: { gender }, ...(eventId ? { eventId } : {}) },
-    include: { student: true, event: true },
+    include: { student: { include: { club: true } }, event: true },
     orderBy: [{ event: { name: "asc" } }, { studentId: "asc" }, { round: "asc" }],
   });
 }

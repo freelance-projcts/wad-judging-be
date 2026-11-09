@@ -13,6 +13,7 @@ tags:
   - name: Admin
   - name: Auth
   - name: Students
+  - name: Clubs
   - name: Events
   - name: Judges
   - name: Performances
@@ -39,6 +40,13 @@ components:
         `Authorization: Bearer <token>` for clients that can't rely on
         cookies (curl, Postman, mobile). Either this or the session cookie
         satisfies auth on every endpoint.
+  parameters:
+    GroupingModeHeader:
+      in: header
+      name: X-Grouping-Mode
+      required: false
+      description: "1 = province (default), 2 = club"
+      schema: { type: string, enum: ["1", "2"], default: "1" }
   schemas:
     Error:
       type: object
@@ -55,6 +63,9 @@ components:
         avatarUrl: { type: string, nullable: true }
     Student:
       type: object
+      description: >
+        A student has exactly one of province or club, never both - which one
+        is required on create depends on the X-Grouping-Mode header.
       properties:
         id: { type: string }
         code: { type: string }
@@ -62,9 +73,16 @@ components:
         gender: { type: string, enum: [MALE, FEMALE, OTHER] }
         province:
           type: string
+          nullable: true
           enum: [WESTERN, CENTRAL, SOUTHERN, NORTHERN, EASTERN, NORTH_WESTERN, NORTH_CENTRAL, UVA, SABARAGAMUWA]
+        clubId: { type: string, nullable: true }
         team: { type: string, enum: [A, B], nullable: true }
         photoUrl: { type: string, nullable: true }
+    Club:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
     Event:
       type: object
       properties:
@@ -269,6 +287,9 @@ paths:
           name: province
           schema: { type: string }
         - in: query
+          name: clubId
+          schema: { type: string }
+        - in: query
           name: team
           schema: { type: string, enum: [A, B] }
         - in: query
@@ -296,6 +317,12 @@ paths:
     post:
       tags: [Students]
       summary: Create a student (admin only)
+      description: >
+        Which of province/clubId is required depends on the X-Grouping-Mode
+        header (1 = province, default; 2 = club) - the other is force-cleared
+        server-side regardless of what's sent for it.
+      parameters:
+        - $ref: "#/components/parameters/GroupingModeHeader"
       requestBody:
         required: true
         content:
@@ -304,8 +331,12 @@ paths:
       responses:
         "201":
           description: Student created
+        "400":
+          description: "province/clubId required for the active mode, or both were provided"
         "403":
           description: Admin access required
+        "404":
+          description: Club not found
 
   /students/marks:
     get:
@@ -333,6 +364,9 @@ paths:
           schema: { type: string, enum: [MALE, FEMALE, OTHER] }
         - in: query
           name: province
+          schema: { type: string }
+        - in: query
+          name: clubId
           schema: { type: string }
         - in: query
           name: team
@@ -394,14 +428,86 @@ paths:
     patch:
       tags: [Students]
       summary: Update a student (admin only)
+      description: >
+        Does NOT read X-Grouping-Mode. Setting province force-clears clubId
+        (and vice versa) to preserve the exactly-one invariant; explicitly
+        clearing one without providing the other is rejected. Omitting both
+        from the body leaves the existing assignment untouched.
       responses:
         "200": { description: Updated }
+        "400": { description: "Cannot clear province/clubId without setting the other, or both were provided" }
+        "404": { description: Club not found }
     delete:
       tags: [Students]
       summary: Delete a student (admin only, blocked if marks exist)
       responses:
         "200": { description: Deleted }
         "409": { description: Student has recorded marks }
+
+  /clubs:
+    get:
+      tags: [Clubs]
+      summary: List/search clubs
+      parameters:
+        - in: query
+          name: search
+          schema: { type: string }
+          description: "Search by name (alias: q)"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  clubs:
+                    type: array
+                    items: { $ref: "#/components/schemas/Club" }
+    post:
+      tags: [Clubs]
+      summary: Create a club (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+      responses:
+        "201": { description: Club created }
+        "403": { description: Admin access required }
+        "409": { description: A club with this name already exists }
+
+  /clubs/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string }
+    patch:
+      tags: [Clubs]
+      summary: Rename a club (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+      responses:
+        "200": { description: Updated }
+        "403": { description: Admin access required }
+    delete:
+      tags: [Clubs]
+      summary: Delete a club (admin only, blocked if students are assigned)
+      responses:
+        "200": { description: Deleted }
+        "409": { description: Club has students assigned }
 
   /events:
     get:
@@ -537,6 +643,9 @@ paths:
           schema: { type: string, enum: [MALE, FEMALE, OTHER] }
         - in: query
           name: province
+          schema: { type: string }
+        - in: query
+          name: clubId
           schema: { type: string }
         - in: query
           name: team
@@ -681,12 +790,16 @@ paths:
   /results/team-performance:
     get:
       tags: [Results]
-      summary: Team Performance - Performance 1, event-specific, province -> Team A/B -> top 5 -> teamTotal
+      summary: Team Performance - Performance 1, event-specific, province/club -> Team A/B -> top 5 -> teamTotal
+      description: >
+        Grouped by province (default) or club, per X-Grouping-Mode. Exactly
+        one of `provinces`/`clubs` is populated per `groupBy`; the other is [].
       parameters:
         - in: query
           name: eventId
           required: true
           schema: { type: string }
+        - $ref: "#/components/parameters/GroupingModeHeader"
       responses:
         "200":
           description: OK
@@ -699,6 +812,7 @@ paths:
                   eventName: { type: string }
                   performanceId: { type: string }
                   performanceName: { type: string }
+                  groupBy: { type: string, enum: [PROVINCE, CLUB] }
                   provinces:
                     type: array
                     items:
@@ -728,18 +842,52 @@ paths:
                                       type: array
                                       items: { $ref: "#/components/schemas/RoundMark" }
                                     countedTowardTotal: { type: boolean }
+                  clubs:
+                    type: array
+                    description: Populated instead of `provinces` when groupBy is CLUB - same inner shape, keyed by clubId/clubName.
+                    items:
+                      type: object
+                      properties:
+                        clubId: { type: string }
+                        clubName: { type: string }
+                        teams:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              team: { type: string, enum: [A, B] }
+                              teamTotal: { type: number }
+                              countedStudentCount: { type: integer }
+                              students:
+                                type: array
+                                items:
+                                  type: object
+                                  properties:
+                                    rank: { type: integer }
+                                    studentId: { type: string }
+                                    code: { type: string }
+                                    fullName: { type: string }
+                                    finalScore: { type: number }
+                                    marks:
+                                      type: array
+                                      items: { $ref: "#/components/schemas/RoundMark" }
+                                    countedTowardTotal: { type: boolean }
         "400": { description: eventId is required }
         "403": { description: Not assigned to Performance 1 }
 
   /results/top-eight:
     get:
       tags: [Results]
-      summary: Top Eight - Performance 1, event-specific, ignores team, top 3 (plus ties) per province
+      summary: Top Eight - Performance 1, event-specific, ignores team, top 3 (plus ties) per province/club
+      description: >
+        Grouped by province (default) or club, per X-Grouping-Mode. Exactly
+        one of `provinces`/`clubs` is populated per `groupBy`; the other is [].
       parameters:
         - in: query
           name: eventId
           required: true
           schema: { type: string }
+        - $ref: "#/components/parameters/GroupingModeHeader"
       responses:
         "200":
           description: OK
@@ -752,6 +900,7 @@ paths:
                   eventName: { type: string }
                   performanceId: { type: string }
                   performanceName: { type: string }
+                  groupBy: { type: string, enum: [PROVINCE, CLUB] }
                   provinces:
                     type: array
                     items:
@@ -759,6 +908,28 @@ paths:
                       properties:
                         province: { type: string }
                         provinceLabel: { type: string }
+                        students:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              rank: { type: integer }
+                              studentId: { type: string }
+                              code: { type: string }
+                              fullName: { type: string }
+                              team: { type: string, nullable: true, enum: [A, B, null] }
+                              finalScore: { type: number }
+                              marks:
+                                type: array
+                                items: { $ref: "#/components/schemas/RoundMark" }
+                  clubs:
+                    type: array
+                    description: Populated instead of `provinces` when groupBy is CLUB - same inner shape, keyed by clubId/clubName.
+                    items:
+                      type: object
+                      properties:
+                        clubId: { type: string }
+                        clubName: { type: string }
                         students:
                           type: array
                           items:
@@ -857,8 +1028,10 @@ paths:
                         studentId: { type: string }
                         code: { type: string }
                         fullName: { type: string }
-                        province: { type: string }
-                        provinceLabel: { type: string }
+                        province: { type: string, nullable: true }
+                        provinceLabel: { type: string, nullable: true }
+                        clubId: { type: string, nullable: true }
+                        clubName: { type: string, nullable: true }
                         team: { type: string, nullable: true, enum: [A, B, null] }
                         finalScore: { type: number }
                         marks:
@@ -870,13 +1043,16 @@ paths:
   /results/all-rounders:
     get:
       tags: [Results]
-      summary: All Rounders - cross-event total using each event's configured performance (admin only)
+      summary: All Rounders - cross-event total using each event's configured performance
       parameters:
         - in: query
           name: gender
           schema: { type: string, enum: [MALE, FEMALE, OTHER] }
         - in: query
           name: province
+          schema: { type: string }
+        - in: query
+          name: clubId
           schema: { type: string }
         - in: query
           name: team
@@ -908,7 +1084,10 @@ paths:
                         code: { type: string }
                         fullName: { type: string }
                         gender: { type: string }
-                        province: { type: string }
+                        province: { type: string, nullable: true }
+                        provinceLabel: { type: string, nullable: true }
+                        clubId: { type: string, nullable: true }
+                        clubName: { type: string, nullable: true }
                         team: { type: string, nullable: true, enum: [A, B, null] }
                         totalScore: { type: number }
                         eventsScored: { type: integer }
@@ -926,7 +1105,7 @@ paths:
                               marks:
                                 type: array
                                 items: { $ref: "#/components/schemas/RoundMark" }
-        "403": { description: Admin access required }
+        "401": { description: Not authenticated }
 
   /results/download:
     get:

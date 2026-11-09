@@ -34,6 +34,7 @@ export async function GET(req: NextRequest) {
     const q = (searchParams.get("q") ?? searchParams.get("search"))?.trim();
     const gender = normalizeEnumParam(searchParams.get("gender"), genders);
     const province = normalizeEnumParam(searchParams.get("province"), provinces);
+    const clubId = searchParams.get("clubId")?.trim() || undefined;
     const team = normalizeEnumParam(searchParams.get("team"), teams);
     const page = parsePositiveInt(searchParams.get("page"), 1);
     const pageSize = parsePositiveInt(searchParams.get("pageSize"), DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
@@ -51,6 +52,7 @@ export async function GET(req: NextRequest) {
     }
     if (gender.value) where.gender = gender.value;
     if (province.value) where.province = province.value;
+    if (clubId) where.clubId = clubId;
     if (team.value) where.team = team.value;
 
     const [students, total] = await prisma.$transaction([

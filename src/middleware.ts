@@ -27,7 +27,7 @@ function applyCorsHeaders(headers: Headers, origin: string | null): void {
     headers.set("Vary", "Origin");
   }
   headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
-  headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Grouping-Mode");
 }
 
 export function middleware(req: NextRequest) {

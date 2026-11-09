@@ -133,22 +133,36 @@ model Event {
 }
 
 model Student {
-  id        String   @id @default(cuid())
-  code      String   @unique
+  id        String    @id @default(cuid())
+  code      String    @unique
   fullName  String
   gender    Gender
-  province  Province
+  province  Province?
+  clubId    String?
   photoUrl  String?
   team      Team?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
+  club        Club?       @relation(fields: [clubId], references: [id], onDelete: Restrict)
   markEntries MarkEntry[]
 
   @@index([province])
   @@index([gender])
   @@index([team])
+  @@index([clubId])
   @@map("students")
+}
+
+model Club {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  students Student[]
+
+  @@map("clubs")
 }
 
 model MarkEntry {
