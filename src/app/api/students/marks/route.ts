@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requirePerformanceAccess, apiErrorResponse, ApiError } from "@/lib/api-auth";
 import { genders, provinces, teams, normalizeEnumParam } from "@/lib/validators";
 import { attachMarksToStudents } from "@/lib/mark-service";
+import { getGroupingMode, studentWhereForGroupingMode } from "@/lib/grouping";
 import type { Prisma } from "@prisma/client";
 
 const DEFAULT_PAGE_SIZE = 20;
@@ -43,7 +44,8 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ items: [], total: 0, page, pageSize, totalPages: 0 });
     }
 
-    const where: Prisma.StudentWhereInput = {};
+    // X-Grouping-Mode: "1" (default) = province students only, "2" = club students only.
+    const where: Prisma.StudentWhereInput = studentWhereForGroupingMode(await getGroupingMode());
     if (q) {
       where.OR = [
         { fullName: { contains: q, mode: "insensitive" } },
