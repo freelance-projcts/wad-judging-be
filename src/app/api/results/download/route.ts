@@ -23,7 +23,8 @@ export async function GET(req: NextRequest) {
     const rows = entries.map((e) => ({
       StudentID: e.student.code,
       Name: e.student.fullName,
-      Province: provinceLabels[e.student.province as Province],
+      Province: e.student.province ? provinceLabels[e.student.province as Province] : "",
+      Club: e.student.club?.name ?? "",
       Team: e.student.team ?? "",
       Event: e.event.name,
       Round: e.round,

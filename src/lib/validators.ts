@@ -67,16 +67,40 @@ export const loginSchema = z.object({
 
 export const teams = ["A", "B"] as const;
 
-export const studentSchema = z.object({
+export const studentBaseSchema = z.object({
   code: z.string().trim().min(1, "ID is required").max(20),
   fullName: z.string().trim().min(2, "Full name is required").max(150),
   gender: z.enum(genders),
-  province: z.enum(provinces),
+  // Neither is required at this layer - which one is mandatory depends on
+  // the active grouping mode (X-Grouping-Mode header), enforced in the
+  // POST /api/students route itself. This schema only guards mutual
+  // exclusivity (see the .refine() below), identically for create and update.
+  province: z.enum(provinces).optional().nullable(),
+  clubId: z.string().min(1).optional().nullable(),
   photoUrl: z.string().optional().nullable(),
   team: z.enum(teams).optional().nullable(),
 });
 
-export const studentUpdateSchema = studentSchema.partial();
+function noBothProvinceAndClub(data: { province?: string | null; clubId?: string | null }) {
+  return !(data.province != null && data.clubId != null);
+}
+
+export const studentSchema = studentBaseSchema.refine(noBothProvinceAndClub, {
+  message: "A student cannot have both a province and a club",
+  path: ["clubId"],
+});
+
+// Built from studentBaseSchema.partial() rather than studentSchema.partial() -
+// you can't .partial() a ZodEffects (the result of .refine()) directly, so
+// each variant gets its own independent .refine() instead.
+export const studentUpdateSchema = studentBaseSchema.partial().refine(noBothProvinceAndClub, {
+  message: "A student cannot have both a province and a club",
+  path: ["clubId"],
+});
+
+export const clubSchema = z.object({
+  name: z.string().trim().min(1, "Club name is required").max(100),
+});
 
 export const eventSchema = z.object({
   name: z.string().trim().min(1, "Event name is required").max(100),

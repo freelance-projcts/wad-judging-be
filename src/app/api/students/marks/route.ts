@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requirePerformanceAccess, apiErrorResponse, ApiError } from "@/lib/api-auth";
 import { genders, provinces, teams, normalizeEnumParam } from "@/lib/validators";
 import { attachMarksToStudents } from "@/lib/mark-service";
+import { getGroupingMode, studentWhereForGroupingMode } from "@/lib/grouping";
 import type { Prisma } from "@prisma/client";
 
 const DEFAULT_PAGE_SIZE = 20;
@@ -34,6 +35,7 @@ export async function GET(req: NextRequest) {
     const q = (searchParams.get("q") ?? searchParams.get("search"))?.trim();
     const gender = normalizeEnumParam(searchParams.get("gender"), genders);
     const province = normalizeEnumParam(searchParams.get("province"), provinces);
+    const clubId = searchParams.get("clubId")?.trim() || undefined;
     const team = normalizeEnumParam(searchParams.get("team"), teams);
     const page = parsePositiveInt(searchParams.get("page"), 1);
     const pageSize = parsePositiveInt(searchParams.get("pageSize"), DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
@@ -42,7 +44,8 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ items: [], total: 0, page, pageSize, totalPages: 0 });
     }
 
-    const where: Prisma.StudentWhereInput = {};
+    // X-Grouping-Mode: "1" (default) = province students only, "2" = club students only.
+    const where: Prisma.StudentWhereInput = studentWhereForGroupingMode(await getGroupingMode());
     if (q) {
       where.OR = [
         { fullName: { contains: q, mode: "insensitive" } },
@@ -51,6 +54,7 @@ export async function GET(req: NextRequest) {
     }
     if (gender.value) where.gender = gender.value;
     if (province.value) where.province = province.value;
+    if (clubId) where.clubId = clubId;
     if (team.value) where.team = team.value;
 
     const [students, total] = await prisma.$transaction([
