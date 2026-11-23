@@ -3,7 +3,7 @@ import { toScoreBreakdown } from "@/lib/scoring";
 import { getPerformanceOne, getPerformanceTwo } from "@/lib/performances";
 import { provinces, provinceLabels } from "@/lib/validators";
 import { ApiError } from "@/lib/api-auth";
-import { getGroupingMode, type GroupingMode } from "@/lib/grouping";
+import { getGroupingMode, studentWhereForGroupingMode, type GroupingMode } from "@/lib/grouping";
 import type { Gender, Province, Team } from "@prisma/client";
 
 type TeamValue = "A" | "B";
@@ -414,10 +414,16 @@ export interface PerformanceTwoResponse {
 
 export async function getPerformanceTwoResults(eventId: string): Promise<PerformanceTwoResponse> {
   const performance = await getPerformanceTwo();
-  const [event, students] = await Promise.all([
+  const [event, allStudents, mode] = await Promise.all([
     requireEvent(eventId),
     scoredStudentsFor(eventId, performance.id),
+    getGroupingMode(),
   ]);
+
+  // Only rank students that belong to the active grouping mode - a club-mode
+  // request should never mix in province-assigned students, and vice versa.
+  const students =
+    mode === "CLUB" ? allStudents.filter((s) => s.clubId != null) : allStudents.filter((s) => s.province != null);
 
   const top8WithTies = topWithTies(sortDescending(students), 8);
 
@@ -481,11 +487,14 @@ export async function getAllRounderResults(filters?: {
   clubId?: string;
   team?: TeamValue;
 }): Promise<AllRounderResponse> {
-  const performanceOne = await getPerformanceOne();
+  const [performanceOne, mode] = await Promise.all([getPerformanceOne(), getGroupingMode()]);
 
   const [students, events, performances] = await Promise.all([
     prisma.student.findMany({
       where: {
+        // Scopes to the active grouping mode first - a specific province/clubId
+        // filter below naturally narrows further rather than being overwritten.
+        ...studentWhereForGroupingMode(mode),
         ...(filters?.gender ? { gender: filters.gender } : {}),
         ...(filters?.province ? { province: filters.province } : {}),
         ...(filters?.clubId ? { clubId: filters.clubId } : {}),

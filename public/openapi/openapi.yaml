@@ -1007,11 +1007,16 @@ paths:
     get:
       tags: [Results]
       summary: Performance Two - same formula, flat top 8 (plus ties at the cutoff, never truncated)
+      description: >
+        Scoped to the active grouping mode (X-Grouping-Mode) - province mode
+        only ranks students with a province, club mode only those with a
+        club. The two are never mixed in the same ranking.
       parameters:
         - in: query
           name: eventId
           required: true
           schema: { type: string }
+        - $ref: "#/components/parameters/GroupingModeHeader"
       responses:
         "200":
           description: OK
@@ -1049,7 +1054,13 @@ paths:
     get:
       tags: [Results]
       summary: All Rounders - cross-event total using each event's configured performance
+      description: >
+        Scoped to the active grouping mode (X-Grouping-Mode) - province mode
+        only includes students with a province, club mode only those with a
+        club; the `province`/`clubId` query filters narrow further within
+        that scope rather than overriding it.
       parameters:
+        - $ref: "#/components/parameters/GroupingModeHeader"
         - in: query
           name: gender
           schema: { type: string, enum: [MALE, FEMALE, OTHER] }
