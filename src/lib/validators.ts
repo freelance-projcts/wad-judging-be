@@ -123,17 +123,17 @@ export const eventStatusSchema = z.object({
 
 /** D/E1-E4/P are each judge's own mark, each recorded alongside the supervisor who oversaw it. */
 export const markScoresSchema = z.object({
-  D: z.number().min(0).max(10),
+  D: z.number().min(0).max(20),
   DSupervisor: z.string().trim().min(1).max(100),
-  E1: z.number().min(0).max(10),
+  E1: z.number().min(0).max(20),
   E1Supervisor: z.string().trim().min(1).max(100),
-  E2: z.number().min(0).max(10),
+  E2: z.number().min(0).max(20),
   E2Supervisor: z.string().trim().min(1).max(100),
-  E3: z.number().min(0).max(10),
+  E3: z.number().min(0).max(20),
   E3Supervisor: z.string().trim().min(1).max(100),
-  E4: z.number().min(0).max(10),
+  E4: z.number().min(0).max(20),
   E4Supervisor: z.string().trim().min(1).max(100),
-  P: z.number().min(0).max(10).default(0),
+  P: z.number().min(0).max(20).default(0),
   PSupervisor: z.string().trim().max(100).optional(),
 });
 
