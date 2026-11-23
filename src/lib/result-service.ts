@@ -254,17 +254,18 @@ export async function getTeamPerformanceResults(eventId: string): Promise<TeamPe
   const eligible = students.filter((s) => s.team !== null);
   const buckets = buildScoredStudentBuckets(eligible, mode);
 
-  // Province mode keeps the top-5-per-team cutoff (teamTotal = top 5 only,
-  // the rest are shown but not counted). Club mode has no cutoff at all -
-  // every student in the club+team counts toward teamTotal.
+  // Province mode counts the top 5 per team toward teamTotal; club mode
+  // counts the top 3. Either way the rest are still shown, just with
+  // countedTowardTotal: false.
+  const cutoff = mode === "CLUB" ? 3 : 5;
   const buildTeamGroups = (bucketStudents: ScoredStudent[]): TeamPerformanceTeamGroup[] =>
     (["A", "B"] as const).map((team) => {
       const sorted = sortDescending(bucketStudents.filter((s) => s.team === team));
-      const counted = mode === "CLUB" ? sorted : sorted.slice(0, 5);
-      const rest = mode === "CLUB" ? [] : sorted.slice(5);
+      const counted = sorted.slice(0, cutoff);
+      const rest = sorted.slice(cutoff);
       const rows: TeamPerformanceStudentRow[] = [
         ...counted.map((s, i) => ({ ...omitProvinceTeam(s), rank: i + 1, countedTowardTotal: true })),
-        ...rest.map((s, i) => ({ ...omitProvinceTeam(s), rank: i + 6, countedTowardTotal: false })),
+        ...rest.map((s, i) => ({ ...omitProvinceTeam(s), rank: i + cutoff + 1, countedTowardTotal: false })),
       ];
       return {
         team,

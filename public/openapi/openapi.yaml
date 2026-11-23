@@ -794,9 +794,9 @@ paths:
       description: >
         Grouped by province (default) or club, per X-Grouping-Mode. Exactly
         one of `provinces`/`clubs` is populated per `groupBy`; the other is [].
-        Province mode keeps a top-5-per-team cutoff for teamTotal (the rest
-        are shown with countedTowardTotal: false). Club mode has no cutoff -
-        every student in the club+team counts toward teamTotal.
+        teamTotal counts the top 5 per team in province mode, or the top 3
+        per team in club mode (the rest are still shown, with
+        countedTowardTotal: false).
       parameters:
         - in: query
           name: eventId
